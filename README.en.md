@@ -4,8 +4,8 @@
 
 JIGEQIU is a self-hostable bookmark manager that runs locally with a single command. Bring everyday browsing
 together with desktop shortcuts, a launchpad, global search, and nested folders.
-No account, application backend, database, or API key required. You can also
-build it as a static website.
+No account, application backend, database, or API key required. Use it as a
+Chrome / Edge new tab extension or deploy the Web version on your own site.
 
 [简体中文](README.md) | **English**
 
@@ -25,6 +25,7 @@ build it as a static website.
 | Import and backup | Browser bookmark HTML import, standard HTML export, and JSON asset backups |
 | Personalization | Light and dark themes, glass surfaces, built-in and custom local wallpapers |
 | Bilingual interface | Switch between Simplified Chinese and English |
+| Browser extension | Load the extracted ZIP locally and open a new tab; no server required |
 | Static deployment | No application backend, database, or API key required in production |
 
 ## Screenshots
@@ -75,6 +76,55 @@ Use export and import to move your bookmarks between them.
 
 ## Quick Start
 
+### Choose Your Download
+
+Open **Assets** in [Releases](https://github.com/jiawulin/jigeqiu/releases).
+Replace `X.Y.Z` below with your chosen release version. Usually you need only one ZIP.
+
+| Goal | Download | Next step |
+| --- | --- | --- |
+| Use JIGEQIU as your Chrome / Edge new tab | `jigeqiu-extension-X.Y.Z.zip` | [Install the extension](#install-the-extension-no-build-required) |
+| Host it on your domain, server, or static hosting | `jigeqiu-vX.Y.Z-web.zip` | [Deploy the Web package](#deploy-the-web-package-no-build-required) |
+| Develop, modify, or build the application | Clone the repository or download Source code | [Run from source](#run-from-source-for-development) |
+| Check download integrity | `SHA256SUMS.txt` | [Verify downloads](#verify-downloads-optional) |
+
+**The ZIPs are not interchangeable.** The Web package cannot be loaded as an
+extension, and the extension does not need a website server.
+GitHub's **Source code (zip / tar.gz)** archives are source files, not ready-to-use packages.
+
+### Install the Extension (No Build Required)
+
+For Chrome / Edge users who want a new tab workspace. No Node.js, commands,
+or web server is required.
+
+1. Download `jigeqiu-extension-X.Y.Z.zip` and extract it to a permanent folder.
+2. Open `chrome://extensions` in Chrome or `edge://extensions` in Edge.
+3. Enable **Developer mode**.
+4. Click **Load unpacked** and select the folder directly containing
+   **`manifest.json`**, not the ZIP or an outer folder without the manifest.
+5. Open a new tab, confirm any browser prompt to keep the new tab change,
+   and read the privacy notice on first launch.
+
+This is not a double-click CRX installer or an extension-store installation.
+Keep the extracted folder in place: the browser still needs its files.
+Resolve any conflict with another extension replacing the new tab.
+Local installation does not mean remote icons, external search, or websites work offline.
+
+#### Extension Updates and Data
+
+1. Export a JSON asset backup from **Manage → Import & Export** and keep it outside the browser.
+2. Close open JIGEQIU extension pages and replace the files in the **original installation
+   folder** with the complete new package, keeping its folder and extension identity unchanged.
+3. Click **Reload** on the extensions page, open a new tab, and check your version and bookmarks.
+
+**Do not uninstall before updating:** uninstalling can remove local data.
+JSON backups cover bookmark assets, not all settings, desktop layouts, or wallpapers.
+Web, Chrome, and Edge data do not sync automatically. Export and import manually
+to move assets between them; back up before upgrading or changing browsers.
+See the [extension documentation](extension/README.md) for source builds, storage, and testing.
+
+### Web Deployment Security
+
 > **Public and LAN deployments must use HTTPS for protected save operations.**
 > Adding/editing bookmarks, deleting them in Manage, and confirming HTML/JSON
 > imports depend on Web Locks to coordinate writes across tabs and avoid
@@ -85,7 +135,7 @@ Use export and import to move your bookmarks between them.
 > needs no local certificate. The browser must still support Web Locks and allow
 > site storage.
 
-### Option 1: Run From Source
+### Run From Source (For Development)
 
 Requirements: Node.js 24.x, npm 10.8.2 or later, and a modern browser with Web Locks support.
 
@@ -116,11 +166,11 @@ No `.env` file is needed for the defaults; use the matching address if you chang
 The server listens on `127.0.0.1` by default. For LAN access, set `HOST=0.0.0.0`,
 use a trusted network, and access the site over HTTPS.
 
-### Option 2: Deploy the Static Package
+### Deploy the Web Package (No Build Required)
 
 No Node.js installation or local build is required.
 
-1. Download `jigeqiu-v0.1.0-web.zip` from [Releases](https://github.com/jiawulin/jigeqiu/releases), using the matching version for later releases.
+1. Download `jigeqiu-vX.Y.Z-web.zip` for your chosen release, not the extension or Source code archive.
 2. Extract the ZIP contents into your Nginx web root. The root should directly contain `index.html`, `assets/`, and `wallpapers/`.
 3. Configure the site, reload Nginx, and open its address in your browser.
 
@@ -152,20 +202,26 @@ save operations that depend on Web Locks will be rejected.
 Use the `SHA256SUMS.txt` release attachment to verify the ZIP.
 The app uses hash routing, so no additional SPA route rewrites are required.
 
+Before updating, export an asset backup, then replace the full site files while
+keeping the same domain, protocol, and port. Moving to another address does not
+automatically transfer browser data; use export and import.
+Do not double-click `index.html`; access the app through your static server's URL.
+
+### Verify Downloads (Optional)
+
+Place both ZIPs and `SHA256SUMS.txt` from the same release in one directory:
+
+```sh
+sha256sum --check SHA256SUMS.txt
+# macOS
+shasum -a 256 -c SHA256SUMS.txt
+```
+
+If you downloaded only one ZIP, this command reports the other as missing,
+not that your downloaded file is corrupt. Alternatively, calculate that file's
+SHA256 and compare it with the matching line in the checksum file.
+
 ## Usage
-
-### Chrome / Edge New Tab Extension
-
-Download `jigeqiu-extension-<version>.zip` from Releases, extract it, enable
-developer mode on the browser's extensions page, and load the folder containing
-`manifest.json`. Node.js is not required. The ZIP is not a double-click installer.
-See the [extension documentation](extension/README.md) for builds, permissions,
-and testing.
-
-Pushing a `vX.Y.Z` tag matching `package.json` builds both the web and extension
-ZIPs and a combined `SHA256SUMS.txt`. The workflow uploads and downloads all three
-assets for verification before publishing a single Release. Failures leave new
-releases in draft; existing published packages are never overwritten automatically.
 
 ### Import Your Bookmarks
 
@@ -269,9 +325,11 @@ it does not remove bookmark-save or import restrictions.
 
 ## Data and Privacy
 
-Bookmarks and preferences use browser LocalStorage. Icon caches and custom
-wallpapers use IndexedDB. The server distributes the application files,
-not your bookmark library.
+The Web version keeps bookmarks and preferences in browser LocalStorage; the
+extension uses its own `chrome.storage.local` without account sync.
+Icon caches and custom wallpapers use IndexedDB. The website server distributes
+application files, not your bookmark library. Web and extension origins and
+different browser profiles keep separate data; installation or updates do not merge them.
 
 On insecure HTTP origins, onboarding alone falls back to a lightweight cookie
 lasting up to 400 days. It remembers welcome exposure, not bookmarks or full task
@@ -297,6 +355,8 @@ HTML parsing uses parse5; pinyin indexing uses pinyin-pro.
 | --- | --- |
 | `npm run dev` | Start the development server |
 | `npm run build` | Build static assets |
+| `npm run build:extension` | Build the unpacked extension in `dist-extension/` |
+| `npm run package:extension` | Build the extension ZIP and SHA256 manifest |
 | `npm run preview` | Preview the production build |
 | `npm test` | Run unit tests |
 | `npm run typecheck` | Check TypeScript types |
@@ -313,6 +373,26 @@ Issues and pull requests are welcome. Include reproduction steps, browser detail
 and expected behavior in bug reports. Keep changes focused, add tests for behavior
 changes, and run `npm run check` before submitting.
 Use synthetic fixtures and isolated browser contexts for testing.
+
+### Maintainer Releases
+
+Commit and push application changes along with matching root versions in
+`package.json` and `package-lock.json` to `master`. After checks pass, create
+and push the matching `vX.Y.Z` tag on that commit. For example, after setting
+the version to `0.1.4`:
+
+```sh
+git tag v0.1.4
+git push origin v0.1.4
+```
+
+**Push only the tag; do not publish an empty Release first.** The release
+workflow checks, builds both ZIPs and a combined checksum file, creates a draft,
+uploads and downloads the assets for verification, then publishes automatically.
+New releases include package-specific installation and update instructions.
+You can add change notes after publication; existing Release descriptions are not overwritten.
+Ordinary `master` pushes update the Pages demo and temporary extension Artifact,
+not the formal Release.
 
 ## License
 

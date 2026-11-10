@@ -149,6 +149,29 @@ test('a new release stays draft until both ZIPs and the checksum are uploaded an
   await publishRelease({ root, tag, repo, run: gh.run });
   const create = gh.calls.find((args) => args.includes('POST'));
   assert.ok(create.includes('draft=true'));
+  const body = create.find((arg) => arg.startsWith('body='));
+  for (const text of [
+    web,
+    extension,
+    'SHA256SUMS.txt',
+    'Chrome',
+    'Edge',
+    'chrome://extensions',
+    'edge://extensions',
+    'manifest.json',
+    'HTTPS',
+    'Source code',
+    'JSON',
+    '不要卸载',
+    'Web',
+    'English',
+  ]) {
+    assert.ok(body.includes(text), `Release instructions missing: ${text}`);
+  }
+  assert.ok(
+    !body.includes('vX.Y.Z'),
+    'Release filenames must use the actual tag',
+  );
   const upload = gh.calls.findIndex((args) => args.includes('--input'));
   const publish = gh.calls.findIndex((args) => args.includes('PATCH'));
   assert.ok(upload > 0 && publish > upload);
