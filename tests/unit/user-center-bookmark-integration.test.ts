@@ -29,7 +29,7 @@ test('all three personal library folder selectors use the shared tree and edit e
   for (const selector of selectors) assert.ok(selector.includes('folders={folders}'));
 });
 
-test('manager save forwards the shared input and existing ID, refreshes, and only then closes', () => {
+test('manager save forwards the shared input and existing ID, refreshes, and only then closes', async () => {
   const declaration = source.match(/const handleSaveBookmark = ([\s\S]*?\n  });/);
   assert.ok(declaration);
   const compiled = transformSync(`return (${declaration[1]});`, { loader: 'ts', target: 'es2022' }).code;
@@ -47,12 +47,12 @@ test('manager save forwards the shared input and existing ID, refreshes, and onl
     createTranslator('zh'),
   );
   const input = { title: 'Changed', notes: 'Retained notes', collectionIds: ['old'], pinnedToDesktop: true };
-  save(input, false);
+  await save(input, false);
   assert.deepEqual(calls.slice(0, 2), [['save', input, 'existing'], ['refresh']]);
   assert.ok(calls.some(call => call[0] === 'edit' && call[1] === null));
   assert.ok(calls.some(call => call[0] === 'toast' && call[1] === '收藏已更新'));
   calls.length = 0;
-  assert.throws(() => {
+  await assert.rejects(async () => {
     const fail = new Function('storage', 'editingBookmark', 'onLibraryChanged', 'setEditingBookmark',
       'setIsAddBookmarkOpen', 'onShowToast', 'commitAndRefresh', 't', compiled)(
       { saveManualBookmark() { throw new Error('Persistence failed'); } }, editingBookmark,
@@ -60,7 +60,7 @@ test('manager save forwards the shared input and existing ID, refreshes, and onl
       commitAndRefresh,
       createTranslator('zh'),
     );
-    fail(input, false);
+    await fail(input, false);
   }, /Persistence failed/);
   assert.deepEqual(calls, []);
 });

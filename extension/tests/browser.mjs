@@ -155,12 +155,10 @@ try {
     true,
   );
   await page.evaluate(() => {
-    const original = Storage.prototype.setItem;
-    Storage.prototype.setItem = function (key, value) {
-      Storage.prototype.setItem = original;
-      if (key === 'jigeqiu-extension-privacy-acknowledged')
-        throw new DOMException('Storage full', 'QuotaExceededError');
-      return original.call(this, key, value);
+    const original = globalThis.chrome.storage.local.set.bind(globalThis.chrome.storage.local);
+    globalThis.chrome.storage.local.set = async () => {
+      globalThis.chrome.storage.local.set = original;
+      throw new Error('QUOTA_BYTES quota exceeded');
     };
   });
   await page.getByRole('button', { name: '知晓并继续', exact: true }).click();
@@ -256,8 +254,8 @@ try {
   remoteRequests.length = 0;
   await dialog.getByRole('button', { name: '添加收藏', exact: true }).click();
   await dialog.waitFor({ state: 'hidden' });
-  const snapshot = await page.evaluate(() =>
-    localStorage.getItem('jipage_library_v2'),
+  const snapshot = await page.evaluate(async () =>
+    (await globalThis.chrome.storage.local.get('jigeqiu-extension-state-v1'))['jigeqiu-extension-state-v1'].data.jipage_library_v2,
   );
   assert.ok(
     JSON.parse(snapshot).bookmarks.some(
@@ -269,25 +267,64 @@ try {
   );
   assert.equal(savedBookmark.iconMode, 'custom');
   assert.equal(savedBookmark.icon, 'https://manual-image.test/icon.png');
+  // Recreate a pre-migration installation with a real library and preferences.
+  await page.evaluate(async () => {
+    const key = 'jigeqiu-extension-state-v1';
+    const { data } = (await globalThis.chrome.storage.local.get(key))[key];
+    for (const [key, value] of Object.entries(data)) localStorage.setItem(key, value);
+    localStorage.setItem('jipage_recent_searches_v1', '["legacy migration"]');
+    localStorage.setItem('unrelated', 'leave untouched');
+    await globalThis.chrome.storage.local.remove(key);
+  });
   await page.reload();
   await page.getByRole('banner').waitFor();
+  assert.deepEqual(await page.evaluate(async () => ({
+    saved: (await globalThis.chrome.storage.local.get('jigeqiu-extension-state-v1'))['jigeqiu-extension-state-v1'].data.jipage_recent_searches_v1,
+    original: localStorage.getItem('jipage_library_v2'),
+    unrelated: (await globalThis.chrome.storage.local.get('jigeqiu-extension-state-v1'))['jigeqiu-extension-state-v1'].data.unrelated,
+  })), { saved: '["legacy migration"]', original: snapshot, unrelated: undefined });
   assert.equal(await page.locator('img[src*="/_favicon/"]').count(), 0);
   assert.ok(
     !remoteRequests.some((request) => request.url.includes('/s2/favicons')),
     'Google icon provider remains off by default',
   );
   assert.equal(
-    await page.evaluate(() => localStorage.getItem('jipage_library_v2')),
+    await page.evaluate(async () => (await globalThis.chrome.storage.local.get('jigeqiu-extension-state-v1'))['jigeqiu-extension-state-v1'].data.jipage_library_v2),
     snapshot,
   );
   const second = await context.newPage();
   await second.goto('chrome://newtab/');
   await second.getByRole('banner').waitFor();
   assert.equal(
-    await second.evaluate(() => localStorage.getItem('jipage_library_v2')),
+    await second.evaluate(async () => (await globalThis.chrome.storage.local.get('jigeqiu-extension-state-v1'))['jigeqiu-extension-state-v1'].data.jipage_library_v2),
     snapshot,
   );
+  // A quota rejection must retain the editor draft and never report a saved bookmark.
+  await page.keyboard.press('Control+Shift+Enter');
+  const failedDialog = page.getByRole('dialog', { name: '添加收藏', exact: true });
+  await failedDialog.getByLabel('网址 URL', { exact: true }).fill('https://example.org/quota-test');
+  await failedDialog.getByLabel('网站名称', { exact: true }).fill('Quota draft');
+  await page.evaluate(() => {
+    const original = globalThis.chrome.storage.local.set.bind(globalThis.chrome.storage.local);
+    globalThis.chrome.storage.local.set = async () => {
+      globalThis.chrome.storage.local.set = original;
+      throw new Error('QUOTA_BYTES quota exceeded');
+    };
+  });
+  await failedDialog.getByRole('button', { name: '添加收藏', exact: true }).click();
+  await failedDialog.getByRole('alert').filter({ hasText: /空间不足/ }).waitFor();
+  assert.equal(await failedDialog.getByLabel('网站名称', { exact: true }).inputValue(), 'Quota draft');
+  await failedDialog.getByRole('button', { name: '添加收藏', exact: true }).click();
+  await failedDialog.waitFor({ state: 'hidden' });
+  await second.getByText(/其他标签页.*更新收藏库/).first().waitFor();
   await second.close();
+  // The authoritative copy survives removal of all old web storage.
+  const committed = await page.evaluate(async () =>
+    (await globalThis.chrome.storage.local.get('jigeqiu-extension-state-v1'))['jigeqiu-extension-state-v1'].data.jipage_library_v2);
+  await page.evaluate(() => localStorage.clear());
+  await page.reload();
+  await page.getByRole('banner').waitFor();
+  assert.equal(await page.evaluate(() => localStorage.getItem('jipage_library_v2')), null);
   const assets = await page.evaluate(async () => {
     const base = globalThis.chrome.runtime.getURL('');
     return Promise.all(
@@ -322,20 +359,21 @@ try {
     .getByRole('main')
     .getByText('Extension smoke test', { exact: true })
     .waitFor();
-  await page.evaluate(() =>
-    localStorage.setItem(
-      'jigeqiu-extension-privacy-acknowledged',
-      'old-version',
-    ),
-  );
+  await page.evaluate(async () => {
+    const key = 'jigeqiu-extension-state-v1';
+    const state = (await globalThis.chrome.storage.local.get(key))[key];
+    state.data['jigeqiu-extension-privacy-acknowledged'] = 'old-version';
+    state.revision++;
+    await globalThis.chrome.storage.local.set({ [key]: state });
+  });
   await page.reload();
   await page
     .getByRole('heading', { name: '使用前的隐私告知', exact: true })
     .waitFor();
   assert.equal(await page.getByRole('banner').count(), 0);
   assert.equal(
-    await page.evaluate(() => localStorage.getItem('jipage_library_v2')),
-    snapshot,
+    await page.evaluate(async () => (await globalThis.chrome.storage.local.get('jigeqiu-extension-state-v1'))['jigeqiu-extension-state-v1'].data.jipage_library_v2),
+    committed,
   );
   await page.getByRole('button', { name: '知晓并继续', exact: true }).click();
   await page.getByRole('banner').waitFor();
@@ -356,8 +394,8 @@ try {
       runtime.id,
     );
     assert.equal(
-      await moved.evaluate(() => localStorage.getItem('jipage_library_v2')),
-      snapshot,
+      await moved.evaluate(async () => (await globalThis.chrome.storage.local.get('jigeqiu-extension-state-v1'))['jigeqiu-extension-state-v1'].data.jipage_library_v2),
+      committed,
     );
     await context.close();
     context = undefined;
@@ -435,6 +473,11 @@ try {
   console.log(
     'PASS: privacy gate, offline policy, acknowledgment; no authorization button, no ungranted fetch or CORS errors, image fallback, granted host access, persistence, assets, routing and CSP',
   );
+} catch (cause) {
+  for (const page of context?.pages() ?? []) {
+    console.error('Extension failure page:', page.url(), await page.locator('body').innerText().catch(() => 'unavailable'));
+  }
+  throw cause;
 } finally {
   await context?.close();
   await rm(profile, { recursive: true, force: true });

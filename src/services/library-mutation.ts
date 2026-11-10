@@ -1,6 +1,8 @@
-/** The command owns persistence; the notification may only read and publish state. */
-export function commitAndRefresh<T>(commit: () => T, refresh?: () => void): T {
-  const result = commit();
+import { storage } from './storage';
+
+/** Publish only after persistence has acknowledged the complete command. */
+export async function commitAndRefresh<T>(commit: () => T, refresh?: () => void): Promise<T> {
+  const result = await storage.mutate(commit);
   try {
     refresh?.();
   } catch {

@@ -6,7 +6,7 @@ import { removeWallpaper, saveWallpaper, visibleWallpaper } from '../../services
 
 interface Props {
   settings: UserSettings;
-  onUpdate(settings: Partial<UserSettings>): boolean | void;
+  onUpdate(settings: Partial<UserSettings>): boolean | void | Promise<boolean | void>;
 }
 
 export function WallpaperSettings({ settings, onUpdate }: Props) {
@@ -27,7 +27,7 @@ export function WallpaperSettings({ settings, onUpdate }: Props) {
     try {
       id = await saveWallpaper(file);
       if (!mounted.current) { await removeWallpaper(id); return; }
-      if (onUpdate({ wallpaperPreset: 'custom', customWallpaperId: id }) === false) {
+      if (await onUpdate({ wallpaperPreset: 'custom', customWallpaperId: id }) === false) {
         await removeWallpaper(id);
         setError(true);
         return;
@@ -41,8 +41,8 @@ export function WallpaperSettings({ settings, onUpdate }: Props) {
       if (mounted.current) setBusy(false);
     }
   }
-  function clear() {
-    if (onUpdate({ wallpaperPreset: active ? 'cyan-lake' : settings.wallpaperPreset, customWallpaperId: undefined }) === false) {
+  async function clear() {
+    if (await onUpdate({ wallpaperPreset: active ? 'cyan-lake' : settings.wallpaperPreset, customWallpaperId: undefined }) === false) {
       setError(true);
       return;
     }

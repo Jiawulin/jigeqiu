@@ -107,7 +107,10 @@ test('HTML import reports stages, cancellation and success only after parent ref
       onImported: () => { events.push('refreshed'); if (throws) throw new Error('refresh'); },
       onboarding: { task: 'import', onExit: noop, onEvent: (event: unknown) => events.push(event) },
     }, {
-      '../../services/storage': { storage: { readLibrary: () => ({}), commitImportedLibrary: noop } },
+      '../../services/storage': { storage: {
+        mutate: async (action: () => unknown) => action(),
+        readLibrary: () => ({}), commitImportedLibrary: noop,
+      } },
       '../../services/import-export/prototype-import': { prepareChromeLibraryImport: () => ({ ok: true, value: preview }) },
     });
     assert.equal(view.hint()?.props.message, 'onboardingImportFile');

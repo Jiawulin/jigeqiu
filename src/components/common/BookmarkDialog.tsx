@@ -27,7 +27,7 @@ export interface BookmarkDialogProps {
   language?: string;
   onboarding?: OnboardingTaskContext;
   onSave: (input: Omit<Bookmark, 'id' | 'createdAt' | 'updatedAt'>, pinToDesktop: boolean) => void | Promise<void>;
-  onCreateFolder?: (name: string, parentId?: string) => Folder;
+  onCreateFolder?: (name: string, parentId?: string) => Folder | Promise<Folder>;
   onOpenExisting?: (bookmark: Bookmark) => void;
   onEditExisting?: (bookmark: Bookmark) => void;
 }

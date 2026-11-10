@@ -52,7 +52,7 @@ export function SearchEnginePresetPicker({ engines, language, onChanged, onShowT
     let result: ReturnType<typeof storage.addSearchEnginePresets>;
     try {
       result = await withSearchEngineMutation(
-        () => storage.addSearchEnginePresets(selectedAvailable.map(preset => preset.id), language),
+        () => storage.mutate(() => storage.addSearchEnginePresets(selectedAvailable.map(preset => preset.id), language)),
         () => mounted.current,
       );
     } catch (cause) {

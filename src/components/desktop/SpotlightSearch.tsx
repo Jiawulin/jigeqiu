@@ -615,7 +615,7 @@ export const SpotlightSearch: React.FC<SpotlightSearchProps> = ({
     if (item.kind === 'switch-engine') {
       if (item.restQuery) {
         if (query.trim()) {
-          storage.addRecentSearch(query.trim());
+          void storage.mutate(() => storage.addRecentSearch(query.trim())).catch(() => {});
         }
         setIsOpen(false);
         handleExternalSearch(item.restQuery, item.engine);
@@ -630,7 +630,7 @@ export const SpotlightSearch: React.FC<SpotlightSearchProps> = ({
     }
 
     if (query.trim()) {
-      storage.addRecentSearch(query.trim());
+      void storage.mutate(() => storage.addRecentSearch(query.trim())).catch(() => {});
     }
     setIsOpen(false);
 
@@ -672,7 +672,7 @@ export const SpotlightSearch: React.FC<SpotlightSearchProps> = ({
   const handleExternalSearch = (searchQuery?: string, engine?: SearchEngine) => {
     const q = (searchQuery || query).trim();
     if (!q) return;
-    storage.addRecentSearch(q);
+    void storage.mutate(() => storage.addRecentSearch(q)).catch(() => {});
     const targetEngine = engine || currentEngine;
     const searchUrl = targetEngine.urlTemplate.replace('{query}', encodeURIComponent(q));
     window.open(searchUrl, '_blank', 'noopener,noreferrer');

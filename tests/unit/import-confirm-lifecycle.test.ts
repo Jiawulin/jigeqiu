@@ -63,6 +63,7 @@ function harness(kind: 'chrome' | 'json', refreshFailure = false, commitFailure?
     transformSync(readFileSync(path, 'utf8'), { loader: 'tsx', format: 'cjs', jsx: 'automatic' }).code)(
     (id: string) => id === 'react' ? hooks
       : id === '../../services/storage' ? { storage: {
+        mutate: async (action: () => unknown) => action(),
         readLibrary: () => preview.base, previewJsonAssetImport: () => preview,
         commitImportedLibrary: commit, commitJsonAssetImport: commit,
       } }

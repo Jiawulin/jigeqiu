@@ -75,11 +75,13 @@ export default function PrototypeApp() {
     };
     const onVisible = () => { if (document.visibilityState === 'visible') check(); };
     window.addEventListener('storage', onStorage);
+    window.addEventListener('application-storage-change', check);
     window.addEventListener('focus', check);
     document.addEventListener('visibilitychange', onVisible);
     check();
     return () => {
       window.removeEventListener('storage', onStorage);
+      window.removeEventListener('application-storage-change', check);
       window.removeEventListener('focus', check);
       document.removeEventListener('visibilitychange', onVisible);
     };
@@ -104,12 +106,12 @@ export default function PrototypeApp() {
     setSettings(next.settings);
     setDesktopLayout(next.desktopLayout);
   };
-  const mutateLibrary = <T,>(commit: () => T): T => commitAndRefresh(commit, refreshLibrary);
-  const desktopAction = (actions: Extract<AssetAction, { type: `desktop.${string}` }>[]) => {
-    setDesktopLayout(storage.executeDesktop(actions));
+  const mutateLibrary = <T,>(commit: () => T): Promise<T> => commitAndRefresh(commit, refreshLibrary);
+  const desktopAction = async (actions: Extract<AssetAction, { type: `desktop.${string}` }>[]) => {
+    setDesktopLayout(await storage.mutate(() => storage.executeDesktop(actions)));
   };
-  const setDesktopPins = (ids: string[], pinned: boolean) => {
-    setDesktopLayout(storage.setDesktopPins(ids, pinned));
+  const setDesktopPins = async (ids: string[], pinned: boolean) => {
+    setDesktopLayout(await storage.mutate(() => storage.setDesktopPins(ids, pinned)));
   };
   const desktopBookmarkIds = desktopLayout?.shortcuts.map(shortcut => shortcut.bookmarkId) ?? [];
   const activeDesktopFolder = desktopLayout?.folders.find(folder => folder.id === activeDesktopFolderId);
@@ -328,7 +330,9 @@ export default function PrototypeApp() {
 
     setAppWindows(prev => [...prev, newWin]);
     setActiveWindowId(newWin.id);
-    storage.recordSiteVisit(bm.id);
+    void storage.mutate(() => storage.recordSiteVisit(bm.id)).catch(cause => {
+      showToast(preferenceSaveError(cause, settings.language));
+    });
   };
 
   const handleFocusWindow = (id: string) => {
@@ -438,36 +442,36 @@ export default function PrototypeApp() {
   };
 
   // Bookmark actions
-  const handleOpenBookmark = (bm: Bookmark) => {
+  const handleOpenBookmark = async (bm: Bookmark) => {
     window.open(bm.url, '_blank', 'noopener,noreferrer');
     try {
-      storage.recordSiteVisit(bm.id);
+      await storage.mutate(() => storage.recordSiteVisit(bm.id));
       setBookmarks(storage.getBookmarks());
     } catch {
       showToast('已尝试打开网址，但未能保存访问记录。请刷新后继续整理收藏。');
     }
   };
 
-  const handleSaveQuickAdd = (
+  const handleSaveQuickAdd = async (
     bookmarkData: Omit<Bookmark, 'id' | 'createdAt' | 'updatedAt'>,
     pinToDesktop: boolean
   ) => {
-    const newBm = mutateLibrary(() => storage.saveManualBookmark({
+    const newBm = await mutateLibrary(() => storage.saveManualBookmark({
       ...bookmarkData,
       pinnedToDesktop: pinToDesktop,
     }, undefined, pinToDesktop && quickAddDesktopFolderId ? { folderId: quickAddDesktopFolderId } : undefined));
     setQuickAddDesktopFolderId(null);
     onboarding.finish('add', newBm.id);
 
-    showToast(`已成功添加「${newBm.title}」`, '撤销', () => {
-      try { mutateLibrary(() => storage.deleteBookmark(newBm.id)); }
+    showToast(`已成功添加「${newBm.title}」`, '撤销', async () => {
+      try { await mutateLibrary(() => storage.deleteBookmark(newBm.id)); }
       catch (error) { showToast(preferenceSaveError(error, settings.language, 'library')); }
     });
   };
 
   // Folder actions
-  const handleRenameFolder = (folderId: string, newName: string) => {
-    mutateLibrary(() => storage.updateFolder(folderId, { name: newName }));
+  const handleRenameFolder = async (folderId: string, newName: string) => {
+    await mutateLibrary(() => storage.updateFolder(folderId, { name: newName }));
     const updated = storage.getFolders();
     setFolders(updated);
     if (activeFolderModal?.id === folderId) {
@@ -475,20 +479,20 @@ export default function PrototypeApp() {
     }
   };
 
-  const handleRemoveFromFolder = (folderId: string, bookmarkId: string) => {
-    mutateLibrary(() => storage.moveBookmarks([bookmarkId]));
+  const handleRemoveFromFolder = async (folderId: string, bookmarkId: string) => {
+    await mutateLibrary(() => storage.moveBookmarks([bookmarkId]));
     const folder = storage.getFolders().find(item => item.id === folderId);
     if (folder) setActiveFolderModal(folder);
     showToast('已移至收藏库根目录，桌面快捷方式不变');
   };
 
-  const handleDeleteFolder = (folderId: string) => {
-    mutateLibrary(() => storage.deleteFolder(folderId));
+  const handleDeleteFolder = async (folderId: string) => {
+    await mutateLibrary(() => storage.deleteFolder(folderId));
     showToast('文件夹已解散，内部书签已保留');
   };
 
-  const handleMoveToFolder = (bmIds: string[], folderId: string) => {
-    mutateLibrary(() => storage.moveBookmarks(bmIds, folderId));
+  const handleMoveToFolder = async (bmIds: string[], folderId: string) => {
+    await mutateLibrary(() => storage.moveBookmarks(bmIds, folderId));
     const folder = storage.getFolders().find(item => item.id === folderId);
     if (folder) showToast(`已移动至文件夹「${folder.name}」`);
   };
@@ -501,26 +505,26 @@ export default function PrototypeApp() {
   };
 
   // Collection actions
-  const handleCloneCollection = (col: Collection) => {
-    const cloned = storage.cloneCollection(col);
+  const handleCloneCollection = async (col: Collection) => {
+    const cloned = await storage.mutate(() => storage.cloneCollection(col));
     setCollections(storage.getCollections());
     showToast(`已成功复制「${cloned.title}」为我的专属副本`);
   };
 
-  const handleTogglePinCollection = (colId: string) => {
+  const handleTogglePinCollection = async (colId: string) => {
     const current = storage.getCollections();
     const col = current.find(c => c.id === colId);
     if (col) {
       col.isPinnedToDesktop = !col.isPinnedToDesktop;
-      storage.saveCollections(current);
+      await storage.mutate(() => storage.saveCollections(current));
       setCollections([...current]);
       showToast(col.isPinnedToDesktop ? '已固定至桌面' : '已从桌面移除');
     }
   };
 
-  const handleSavePlatformSiteToLibrary = (site: PlatformSite) => {
+  const handleSavePlatformSiteToLibrary = async (site: PlatformSite) => {
     try {
-      storage.saveManualBookmark({
+      await storage.mutate(() => storage.saveManualBookmark({
         title: site.title,
         url: site.url,
         domain: site.domain,
@@ -531,16 +535,16 @@ export default function PrototypeApp() {
         pinnedToDesktop: true,
         order: bookmarks.length + 1,
         collectionIds: site.relatedCollectionIds,
-      });
+      }));
       refreshLibrary();
       showToast(`已将「${site.title}」存入收藏库并固定至桌面`);
     } catch (error) { showToast(bookmarkSaveError(error)); }
   };
 
   // Settings update
-  const handleUpdateSettings = (updates: Partial<UserSettings>): boolean => {
+  const handleUpdateSettings = async (updates: Partial<UserSettings>): Promise<boolean> => {
     try {
-      const next = storage.saveUserSettings(updates);
+      const next = await storage.mutate(() => storage.saveUserSettings(updates));
       setSettings(next);
       return true;
     } catch (cause) {
@@ -551,7 +555,7 @@ export default function PrototypeApp() {
   };
 
   // Toggle bookmark pinned in iPadOS Dock
-  const handleToggleDockBookmark = (bmId: string) => {
+  const handleToggleDockBookmark = async (bmId: string) => {
     const effectiveDockIds =
       settings.dockBookmarkIds !== undefined
         ? [...settings.dockBookmarkIds]
@@ -566,7 +570,7 @@ export default function PrototypeApp() {
     } else {
       updatedDockIds = [...effectiveDockIds, bmId];
     }
-    if (!handleUpdateSettings({ dockBookmarkIds: updatedDockIds })) return false;
+    if (!await handleUpdateSettings({ dockBookmarkIds: updatedDockIds })) return false;
     showToast(isCurrentlyInDock
       ? settings.language === 'en' ? `Unpinned "${bm?.title || 'Bookmark'}" from Taskbar` : `已从任务栏取消固定「${bm?.title || '网址'}」`
       : settings.language === 'en' ? `Pinned "${bm?.title || 'Bookmark'}" to Taskbar` : `已将「${bm?.title || '网址'}」固定到任务栏`);
@@ -574,19 +578,19 @@ export default function PrototypeApp() {
   };
 
   // Delete bookmark / Cancel favorite completely
-  const handleDeleteBookmark = (bmId: string) => {
+  const handleDeleteBookmark = async (bmId: string) => {
     const bm = bookmarks.find(b => b.id === bmId);
     if (!bm) return;
 
-    mutateLibrary(() => storage.deleteBookmark(bmId));
+    await mutateLibrary(() => storage.deleteBookmark(bmId));
     showToast(settings.language === 'en' ? 'Bookmark moved to recycle bin' : `已将「${bm.title}」移至回收站`);
   };
 
   // Update bookmark metadata
-  const handleUpdateBookmark = (bmId: string, updates: Partial<Bookmark>) => {
+  const handleUpdateBookmark = async (bmId: string, updates: Partial<Bookmark>) => {
     const previous = storage.getBookmarks().find(bookmark => bookmark.id === bmId);
     if (!previous) throw new Error('NOT_FOUND');
-    mutateLibrary(() => storage.saveManualBookmark({ ...previous, ...updates }, bmId));
+    await mutateLibrary(() => storage.saveManualBookmark({ ...previous, ...updates }, bmId));
     showToast('已更新收藏');
   };
 
@@ -698,8 +702,8 @@ export default function PrototypeApp() {
                 setQuickAddDesktopFolderId(null);
                 setIsQuickAddOpen(true);
               }}
-              onUnpinFromDesktop={bmId => {
-                setDesktopPins([bmId], false);
+              onUnpinFromDesktop={async bmId => {
+                await setDesktopPins([bmId], false);
                 showToast('已从桌面移除快捷方式，原收藏不变');
               }}
               onToggleDockBookmark={handleToggleDockBookmark}
@@ -728,10 +732,10 @@ export default function PrototypeApp() {
           showDock={settings.showDock !== false} dockIconSize={settings.dockIconSize}
           language={settings.language} onNavigate={section => navigateManagement(section)}>
         {accountInitialTab === 'trash' && <BookmarkTrashView entries={bookmarkTrash} folderEntries={folderTrash} folders={folders} language={settings.language}
-          onRestoreFolder={id => { mutateLibrary(() => storage.restoreTrashedFolder(id)); }}
-          onPurgeFolder={id => { mutateLibrary(() => storage.purgeTrashedFolder(id)); }}
-          onRestore={id => { mutateLibrary(() => storage.restoreTrashedBookmark(id)); }}
-          onPurge={id => { mutateLibrary(() => storage.purgeTrashedBookmark(id)); }} />}
+          onRestoreFolder={async id => { await mutateLibrary(() => storage.restoreTrashedFolder(id)); }}
+          onPurgeFolder={async id => { await mutateLibrary(() => storage.purgeTrashedFolder(id)); }}
+          onRestore={async id => { await mutateLibrary(() => storage.restoreTrashedBookmark(id)); }}
+          onPurge={async id => { await mutateLibrary(() => storage.purgeTrashedBookmark(id)); }} />}
         {accountInitialTab !== 'trash' && (
           <UserCenterView
             onboarding={taskContext?.task === 'import' ? taskContext : undefined}
@@ -774,7 +778,7 @@ export default function PrototypeApp() {
         onRemoveShortcut={bookmarkId => setDesktopPins([bookmarkId], false)}
         onDeleteBookmark={handleDeleteBookmark}
         onRename={name => desktopAction([{ type: 'desktop.folder.rename', id: activeDesktopFolder.id, name }])}
-        onMove={(bookmarkId, folderId) => {
+        onMove={async (bookmarkId, folderId) => {
           const current = storage.getDesktopLayout()!;
           const shortcut = current.shortcuts.find(shortcut => shortcut.bookmarkId === bookmarkId);
           if (!shortcut) throw new Error('NOT_FOUND');
@@ -782,32 +786,32 @@ export default function PrototypeApp() {
           if (folderId && !folder) throw new Error('INVALID_REFERENCE');
           const remainingRoot = current.root.filter(ref => ref.kind !== 'shortcut' || ref.id !== shortcut.id);
           const sourcePosition = remainingRoot.findIndex(ref => ref.kind === 'desktop-folder' && ref.id === activeDesktopFolder.id);
-          desktopAction([{ type: 'desktop.move', ref: { kind: 'shortcut', id: shortcut.id }, to: folderId
+          await desktopAction([{ type: 'desktop.move', ref: { kind: 'shortcut', id: shortcut.id }, to: folderId
             ? { kind: 'folder', folderId, index: folder!.shortcutIds.filter(id => id !== shortcut.id).length }
             : { kind: 'root', index: sourcePosition < 0 ? remainingRoot.length : sourcePosition + 1 } }]);
         }}
-        onPin={bookmarkId => {
+        onPin={async bookmarkId => {
           const current = storage.getDesktopLayout()!;
           const target = current.folders.find(folder => folder.id === activeDesktopFolder.id);
           if (!target) throw new Error('NOT_FOUND');
           const existing = current.shortcuts.find(shortcut => shortcut.bookmarkId === bookmarkId);
-          if (existing) desktopAction([{ type: 'desktop.move', ref: { kind: 'shortcut', id: existing.id }, to: {
+          if (existing) await desktopAction([{ type: 'desktop.move', ref: { kind: 'shortcut', id: existing.id }, to: {
             kind: 'folder', folderId: activeDesktopFolder.id,
             index: target.shortcutIds.filter(id => id !== existing.id).length,
           } }]);
-          else desktopAction([{ type: 'desktop.pin', bookmarkId, shortcutId: crypto.randomUUID(), to: {
+          else await desktopAction([{ type: 'desktop.pin', bookmarkId, shortcutId: crypto.randomUUID(), to: {
             kind: 'folder', folderId: activeDesktopFolder.id, index: target.shortcutIds.length,
           } }]);
         }}
-        onReorder={ids => {
+        onReorder={async ids => {
           if (ids.length !== activeDesktopFolder.shortcutIds.length || new Set(ids).size !== ids.length
             || ids.some(id => !activeDesktopFolder.shortcutIds.includes(id))) throw new Error('INVALID_INPUT');
-          desktopAction(ids.map((id, index) => ({ type: 'desktop.move', ref: { kind: 'shortcut', id }, to: {
+          await desktopAction(ids.map((id, index) => ({ type: 'desktop.move', ref: { kind: 'shortcut', id }, to: {
             kind: 'folder', folderId: activeDesktopFolder.id, index,
           } })));
         }}
-        onRemove={mode => {
-          desktopAction([{ type: 'desktop.folder.remove', id: activeDesktopFolder.id, mode }]);
+        onRemove={async mode => {
+          await desktopAction([{ type: 'desktop.folder.remove', id: activeDesktopFolder.id, mode }]);
           setActiveDesktopFolderId(null);
         }}
         onQuickAdd={() => {
@@ -840,9 +844,9 @@ export default function PrototypeApp() {
             return mutateLibrary(() => storage.createFolder(name, [], parentId));
           }}
           desktopBookmarkIds={desktopBookmarkIds}
-          onTogglePinDesktop={bmId => {
+          onTogglePinDesktop={async bmId => {
             const bookmark = bookmarks.find(item => item.id === bmId);
-            if (bookmark) setDesktopPins([bmId], desktopBookmarkIds.includes(bmId) === false);
+            if (bookmark) await setDesktopPins([bmId], desktopBookmarkIds.includes(bmId) === false);
           }}
           onManageBookmark={bookmark => {
             setActiveFolderModal(null);
@@ -895,8 +899,8 @@ export default function PrototypeApp() {
         onCreateFolder={(name, parentId) => {
           return mutateLibrary(() => storage.createFolder(name, [], parentId));
         }}
-        onSave={input => {
-          mutateLibrary(() => storage.saveManualBookmark(input, bookmarkToEdit.id));
+        onSave={async input => {
+          await mutateLibrary(() => storage.saveManualBookmark(input, bookmarkToEdit.id));
           showToast('已更新收藏');
         }}
       />}
@@ -967,9 +971,9 @@ export default function PrototypeApp() {
           onOpenBookmark={handleOpenBookmark}
           onEditBookmark={openBookmarkEditor}
           desktopBookmarkIds={desktopBookmarkIds}
-          onTogglePinDesktop={bmId => {
+          onTogglePinDesktop={async bmId => {
             const bookmark = bookmarks.find(item => item.id === bmId);
-            if (bookmark) setDesktopPins([bmId], desktopBookmarkIds.includes(bmId) === false);
+            if (bookmark) await setDesktopPins([bmId], desktopBookmarkIds.includes(bmId) === false);
           }}
           onManageBookmark={bookmark => {
             setLibraryBookmarkToReveal(bookmark.id);
@@ -1015,11 +1019,11 @@ export default function PrototypeApp() {
           setLibraryBookmarkToReveal(bookmark.id);
           navigateManagement('bookmarks');
         }}
-        onTogglePinDesktop={bmId => {
+        onTogglePinDesktop={async bmId => {
           const bm = bookmarks.find(b => b.id === bmId);
           if (bm) {
             const pinned = desktopBookmarkIds.includes(bmId);
-            setDesktopPins([bmId], !pinned);
+            await setDesktopPins([bmId], !pinned);
             if (!pinned && taskContext?.task === 'pin') {
               navigate({ page: 'desktop' });
               setRevealDesktopBookmarkId(bmId);

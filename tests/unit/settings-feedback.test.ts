@@ -7,7 +7,7 @@ import { transformSync } from 'esbuild';
 import type { Bookmark } from '../../src/types';
 import { preferenceSaveError } from '../../src/services/preference-save-error';
 
-test('library scope gives actionable bilingual data errors without settings-specific wording', () => {
+test('library scope gives actionable bilingual data errors without settings-specific wording', async () => {
   const cases = [
     [new DOMException('full', 'QuotaExceededError'), /空间不足/, /storage is full/i],
     [{ code: 'QUOTA_EXCEEDED' }, /空间不足/, /storage is full/i],
@@ -49,17 +49,18 @@ function appHandlers(failure?: unknown, language = 'zh', ids: string[] = []) {
   const preferenceSaveError = helperImport ? require(helperImport[1]).preferenceSaveError : undefined;
   const handlers = new Function('storage', 'setSettings', 'showToast', 'settings', 'bookmarks', 'preferenceSaveError',
     `${body}\nreturn { update: handleUpdateSettings, toggle: handleToggleDockBookmark };`)(
-    { saveUserSettings(updates: unknown) { calls.push(['save', updates]); if (failure) throw failure; return next; } },
+    { mutate: async (action: () => unknown) => action(),
+      saveUserSettings(updates: unknown) { calls.push(['save', updates]); if (failure) throw failure; return next; } },
     (value: unknown) => calls.push(['state', value]),
     (message: string) => calls.push(['toast', message]),
     { language, dockBookmarkIds: ids }, [{ id: 'bm', title: 'Example' }], preferenceSaveError,
-  ) as { update(updates: object): boolean; toggle(id: string): boolean };
+  ) as { update(updates: object): Promise<boolean>; toggle(id: string): Promise<boolean> };
   return { ...handlers, calls, next };
 }
 
-test('parent settings handler returns success only after persistence and never publishes failed settings', () => {
+test('parent settings handler returns success only after persistence and never publishes failed settings', async () => {
   const ok = appHandlers();
-  assert.equal(ok.update({ dockIconSize: 60 }), true);
+  assert.equal(await ok.update({ dockIconSize: 60 }), true);
   assert.deepEqual(ok.calls, [['save', { dockIconSize: 60 }], ['state', ok.next]]);
   for (const [language, cause, expected] of [
     ['zh', new DOMException('full', 'QuotaExceededError'), /空间不足/],
@@ -68,7 +69,7 @@ test('parent settings handler returns success only after persistence and never p
     ['zh', { code: 'COMMIT_UNCERTAIN' }, /刷新.*检查|重新载入.*检查/],
   ] as const) {
     const view = appHandlers(cause, language);
-    assert.equal(view.update({ showDock: false }), false);
+    assert.equal(await view.update({ showDock: false }), false);
     assert.equal(view.calls.filter(call => call[0] === 'state').length, 0);
     assert.equal(view.calls.filter(call => call[0] === 'toast').length, 1);
     assert.match(String(view.calls.at(-1)![1]), expected);
@@ -78,16 +79,16 @@ test('parent settings handler returns success only after persistence and never p
   }
 });
 
-test('parent pin and unpin announce success only after a successful settings write', () => {
+test('parent pin and unpin announce success only after a successful settings write', async () => {
   for (const ids of [[], ['bm']]) {
     const fail = appHandlers(new Error('COMMIT_UNCERTAIN'), 'en', ids);
-    assert.equal(fail.toggle('bm'), false);
+    assert.equal(await fail.toggle('bm'), false);
     assert.equal(fail.calls.filter(call => call[0] === 'toast').length, 1);
     assert.doesNotMatch(String(fail.calls.at(-1)![1]), /^(Pinned|Unpinned)/);
     assert.match(String(fail.calls.at(-1)![1]), /library/i);
     assert.doesNotMatch(String(fail.calls.at(-1)![1]), /settings/i);
     const ok = appHandlers(undefined, 'en', ids);
-    assert.equal(ok.toggle('bm'), true);
+    assert.equal(await ok.toggle('bm'), true);
     assert.deepEqual(ok.calls.map(call => call[0]), ['save', 'state', 'toast']);
     assert.match(String(ok.calls.at(-1)![1]), ids.length ? /^Unpinned/ : /^Pinned/);
   }
@@ -134,6 +135,7 @@ function dockHarness(options: {
   const module = { exports: {} as { BottomDock: (props: object) => React.ReactElement } };
   new Function('require', 'module', 'exports', compiled)(
     (id: string) => id === 'react' ? hooks : id === '../../services/storage' ? { storage: {
+      mutate: async (action: () => unknown) => action(),
       getUserSettings: () => {
         if (options.readBlocked?.()) throw new DOMException('denied', 'SecurityError');
         return { language: options.language ?? 'en' };
@@ -162,13 +164,13 @@ function dockHarness(options: {
   };
   return {
     calls, all, open, button, events,
-    run(action: () => void) {
+    async run(action: () => void | Promise<void>) {
       const previous = Object.getOwnPropertyDescriptor(globalThis, 'window');
       Object.defineProperty(globalThis, 'window', { configurable: true, value: {
         innerWidth: 1000, addEventListener: (name: string, fn: any) => events.set(name, fn),
         removeEventListener: (name: string) => events.delete(name),
       } });
-      try { action(); } finally {
+      try { await action(); } finally {
         if (previous) Object.defineProperty(globalThis, 'window', previous);
         else Reflect.deleteProperty(globalThis, 'window');
       }
@@ -176,13 +178,13 @@ function dockHarness(options: {
   };
 }
 
-test('Dock slider/reset/hide/reorder delegate exactly once without local writes when parent supplied', () => {
+test('Dock slider/reset/hide/reorder delegate exactly once without local writes when parent supplied', async () => {
   const view = dockHarness({ callback: () => true });
-  view.run(() => {
+  await view.run(async () => {
     view.open();
-    view.all().find(node => node.props.type === 'range')!.props.onChange({ target: { value: '70' } });
-    view.button('恢复默认大小 (48px)').props.onClick();
-    view.open(); view.button('Hide Taskbar').props.onClick();
+    await view.all().find(node => node.props.type === 'range')!.props.onChange({ target: { value: '70' } });
+    await view.button('恢复默认大小 (48px)').props.onClick();
+    view.open(); await view.button('Hide Taskbar').props.onClick();
     const items = view.all().filter(node => node.props.draggable);
     items[0].props.onDragStart({ dataTransfer: { setData: noop } });
     view.all().filter(node => node.props.draggable)[1].props.onDrop({ preventDefault: noop });
@@ -193,45 +195,45 @@ test('Dock slider/reset/hide/reorder delegate exactly once without local writes 
   });
 });
 
-test('Dock rejected parent result keeps committed size/menu and never falls back to a second write', () => {
+test('Dock rejected parent result keeps committed size/menu and never falls back to a second write', async () => {
   const view = dockHarness({ callback: () => false });
-  view.run(() => {
+  await view.run(async () => {
     view.open();
-    view.all().find(node => node.props.type === 'range')!.props.onChange({ target: { value: '70' } });
+    await view.all().find(node => node.props.type === 'range')!.props.onChange({ target: { value: '70' } });
     assert.equal(view.all().find(node => node.props.type === 'range')!.props.value, 60);
-    view.button('恢复默认大小 (48px)').props.onClick();
+    await view.button('恢复默认大小 (48px)').props.onClick();
     assert.equal(view.all().find(node => node.props.type === 'range')!.props.value, 60);
-    view.button('Hide Taskbar').props.onClick();
+    await view.button('Hide Taskbar').props.onClick();
     assert.ok(view.button('Hide Taskbar'));
     assert.equal(view.calls.some(call => call[0] === 'local'), false);
   });
 });
 
-test('Dock drag resize rolls its preview back when delegated persistence fails', () => {
+test('Dock drag resize rolls its preview back when delegated persistence fails', async () => {
   const view = dockHarness({ callback: () => false });
-  view.run(() => {
+  await view.run(async () => {
     const grip = view.all().find(node => node.props.onMouseDown && node.props.onDoubleClick)!;
     grip.props.onMouseDown({ preventDefault: noop, stopPropagation: noop, clientY: 200 });
     view.events.get('mousemove')!({ clientY: 180 });
     view.all();
-    view.events.get('mouseup')!();
+    await view.events.get('mouseup')!();
     view.open();
     assert.equal(view.all().find(node => node.props.type === 'range')!.props.value, 60);
     assert.deepEqual(view.calls, [['parent', { dockIconSize: 74 }]]);
   });
 });
 
-test('Dock standalone saves locally once, catches failure and retains size with localized uncertainty guidance', () => {
+test('Dock standalone saves locally once, catches failure and retains size with localized uncertainty guidance', async () => {
   const ok = dockHarness();
-  ok.run(() => {
-    ok.open(); ok.all().find(node => node.props.type === 'range')!.props.onChange({ target: { value: '70' } });
+  await ok.run(async () => {
+    ok.open(); await ok.all().find(node => node.props.type === 'range')!.props.onChange({ target: { value: '70' } });
     assert.deepEqual(ok.calls, [['local', { dockIconSize: 70 }]]);
     assert.equal(ok.all().find(node => node.props.type === 'range')!.props.value, 70);
   });
   for (const language of ['zh', 'en']) {
     const view = dockHarness({ failure: new Error('COMMIT_UNCERTAIN'), language });
-    view.run(() => {
-      view.open(); view.all().find(node => node.props.type === 'range')!.props.onChange({ target: { value: '70' } });
+    await view.run(async () => {
+      view.open(); await view.all().find(node => node.props.type === 'range')!.props.onChange({ target: { value: '70' } });
       assert.equal(view.all().find(node => node.props.type === 'range')!.props.value, 60);
       const alert = view.all().find(node => node.props.role === 'alert');
       assert.ok(alert);
@@ -241,34 +243,34 @@ test('Dock standalone saves locally once, catches failure and retains size with 
   }
 });
 
-test('Dock still renders failure feedback if storage permissions also block language reads', () => {
+test('Dock still renders failure feedback if storage permissions also block language reads', async () => {
   let blocked = false;
   const view = dockHarness({
     readBlocked: () => blocked, failure: new DOMException('denied', 'SecurityError'),
   });
-  view.run(() => {
+  await view.run(async () => {
     view.open();
     const slider = view.all().find(node => node.props.type === 'range')!;
     blocked = true;
-    slider.props.onChange({ target: { value: '70' } });
+    await slider.props.onChange({ target: { value: '70' } });
     const alert = view.all().find(node => node.props.role === 'alert');
     assert.ok(alert);
     assert.match(content(alert), /权限|permission/i);
   });
 });
 
-test('Dock keeps legacy void parent callbacks compatible and catches throwing parent callbacks without fallback writes', () => {
+test('Dock keeps legacy void parent callbacks compatible and catches throwing parent callbacks without fallback writes', async () => {
   const legacy = dockHarness({ callback: noop });
-  legacy.run(() => {
+  await legacy.run(async () => {
     legacy.open();
-    legacy.all().find(node => node.props.type === 'range')!.props.onChange({ target: { value: '70' } });
+    await legacy.all().find(node => node.props.type === 'range')!.props.onChange({ target: { value: '70' } });
     assert.equal(legacy.all().find(node => node.props.type === 'range')!.props.value, 70);
     assert.deepEqual(legacy.calls, [['parent', { dockIconSize: 70 }]]);
   });
   const failed = dockHarness({ callback: () => { throw new DOMException('full', 'QuotaExceededError'); } });
-  failed.run(() => {
+  await failed.run(async () => {
     failed.open();
-    failed.button('恢复默认大小 (48px)').props.onClick();
+    await failed.button('恢复默认大小 (48px)').props.onClick();
     assert.equal(failed.all().find(node => node.props.type === 'range')!.props.value, 60);
     assert.ok(failed.all().find(node => node.props.role === 'alert'));
     assert.equal(failed.calls.some(call => call[0] === 'local'), false);

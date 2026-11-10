@@ -119,7 +119,7 @@ for (const operation of ['save', 'create-folder'] as const) {
     });
     await view.menu('one', 'Edit bookmark');
     const form = view.find(node => !!node.props.onSave && !!node.props.bookmark);
-    assert.throws(() => operation === 'save'
+    await assert.rejects(async () => operation === 'save'
       ? form.props.onSave({ title: 'Changed' })
       : form.props.onCreateFolder('New archive folder'), /COMMIT_UNCERTAIN/);
     assert.equal(refreshes, 1);
@@ -128,7 +128,7 @@ for (const operation of ['save', 'create-folder'] as const) {
   });
 }
 
-test('desktop taskbar membership never derives from legacy desktop flags', () => {
+test('desktop taskbar membership never derives from legacy desktop flags', async () => {
   for (const [ids, label] of [[[], 'Pin to Taskbar'], [undefined, 'Pin to Taskbar']] as const) {
     const view = harness('desktop', { dockBookmarkIds: ids });
     view.item('one').props.onContextMenu(view.event());
@@ -136,9 +136,9 @@ test('desktop taskbar membership never derives from legacy desktop flags', () =>
   }
 });
 
-test('desktop creation without a mutation owner cannot report a successful create', () => {
+test('desktop creation without a mutation owner cannot report a successful create', async () => {
   const view = harness('desktop', { onDesktopAction: undefined });
-  view.button('New desktop folder').props.onClick();
+  await view.button('New desktop folder').props.onClick();
   const dialog = view.all().find(node => !!node.props.onCreate);
   if (dialog) assert.throws(() => dialog.props.onCreate('Kept input'));
   assert.equal(view.all().some(node => !!node.props.onCreate), false);
@@ -146,10 +146,10 @@ test('desktop creation without a mutation owner cannot report a successful creat
   assert.equal(view.calls.some(call => call[0] === 'desktop'), false);
 });
 
-test('unavailable desktop layout never renders legacy pinned assets or allows unprotected creation', () => {
+test('unavailable desktop layout never renders legacy pinned assets or allows unprotected creation', async () => {
   const view = harness('desktop', { desktopLayout: null });
   assert.equal(view.all().filter(node => node.props['data-desktop-id']).length, 0);
-  view.button('New desktop folder').props.onClick();
+  await view.button('New desktop folder').props.onClick();
   assert.equal(view.all().some(node => !!node.props.onCreate), false);
   assert.equal(view.calls.some(call => call[0] === 'desktop' || call[0] === 'legacy-unpin'), false);
   assert.match(content(view.find(node => node.props.role === 'alert')), /unavailable/i);
@@ -161,14 +161,14 @@ test('desktop folder rename with no mutation owner retains the edit form and inp
   view.find(node => node.type === 'input' && node.props['aria-label'] === '文件夹名称')
     .props.onChange({ target: { value: 'My draft' } });
   view.props.onDesktopAction = undefined;
-  view.find(node => node.type === 'form' && node.props['aria-label'] === 'Rename folder').props.onSubmit(view.event());
+  await view.find(node => node.type === 'form' && node.props['aria-label'] === 'Rename folder').props.onSubmit(view.event());
   assert.equal(view.find(node => node.type === 'input').props.value, 'My draft');
   assert.match(content(view.find(node => node.props.role === 'alert')), /unavailable|cannot|not available/i);
 });
 
-test('desktop folder create delegates exactly one command', () => {
+test('desktop folder create delegates exactly one command', async () => {
   const view = harness('desktop');
-  view.button('New desktop folder').props.onClick();
+  await view.button('New desktop folder').props.onClick();
   view.find(node => !!node.props.onCreate).props.onCreate('New group');
   assert.equal(view.calls.length, 1);
   const [owner, actions] = view.calls[0] as [string, Record<string, unknown>[]];
@@ -182,8 +182,8 @@ test('desktop folder create delegates exactly one command', () => {
 test('desktop folder rename delegates once and closes only after success', async () => {
   const view = harness('desktop');
   await view.menu('group', 'Rename folder');
-  view.find(node => node.type === 'input').props.onChange({ target: { value: 'Renamed' } });
-  view.find(node => node.type === 'form').props.onSubmit(view.event());
+  await view.find(node => node.type === 'input').props.onChange({ target: { value: 'Renamed' } });
+  await view.find(node => node.type === 'form').props.onSubmit(view.event());
   assert.deepEqual(view.calls, [['desktop', [{ type: 'desktop.folder.rename', id: 'group', name: 'Renamed' }]]]);
   assert.equal(view.all().some(node => node.type === 'form'), false);
 });
@@ -191,7 +191,7 @@ test('desktop folder rename delegates once and closes only after success', async
 test('desktop shortcut move delegates once and closes only after success', async () => {
   const view = harness('desktop');
   await view.menu('one', 'Move to desktop folder…');
-  view.find(node => node.type === 'form').props.onSubmit(view.event());
+  await view.find(node => node.type === 'form').props.onSubmit(view.event());
   assert.deepEqual(view.calls, [['desktop', [{
     type: 'desktop.move', ref: { kind: 'shortcut', id: 's-one' },
     to: { kind: 'folder', folderId: 'group', index: 0 },
@@ -216,14 +216,14 @@ for (const [cause, expected] of [
   [new Error('COMMIT_UNCERTAIN'), /uncertain.*refresh.*library/i],
   [new DOMException('full', 'QuotaExceededError'), /storage is full/i],
 ] as const) {
-  test(`desktop drag reorder ${cause.message} calls owner once, keeps layout and uses library feedback`, () => {
+  test(`desktop drag reorder ${cause.message} calls owner once, keeps layout and uses library feedback`, async () => {
     const calls: unknown[] = [];
     const view = harness('desktop', { onDesktopAction: (actions: unknown) => { calls.push(actions); throw cause; } });
     const before = structuredClone(view.props.desktopLayout);
     view.item('one').props.onDragStart(view.event());
     const grid = view.find(node => node.props['data-testid'] === 'desktop-grid');
     grid.props.onDragOver({ ...view.event(), clientX: 950, clientY: 300 });
-    view.find(node => node.props['data-testid'] === 'desktop-grid').props.onDrop(view.event());
+    await view.find(node => node.props['data-testid'] === 'desktop-grid').props.onDrop(view.event());
     assert.equal(calls.length, 1);
     assert.deepEqual(view.props.desktopLayout, before);
     const message = content(view.find(node => node.props.role === 'alert'));
@@ -232,7 +232,7 @@ for (const [cause, expected] of [
   });
 }
 
-test('taskbar reorder invokes parent once and displays no optimistic reorder on false', () => {
+test('taskbar reorder invokes parent once and displays no optimistic reorder on false', async () => {
   const calls: unknown[] = [];
   const view = harness('dock', { onUpdateDockSettings: (updates: unknown) => { calls.push(updates); return false; } });
   view.all().filter(node => node.props.draggable)[0].props.onDragStart(view.event());
@@ -242,7 +242,7 @@ test('taskbar reorder invokes parent once and displays no optimistic reorder on 
   assert.equal(view.calls.some(call => call[0] === 'local-write'), false);
 });
 
-test('taskbar reorder throwing uncertainty uses library feedback and does not fall back to another write', () => {
+test('taskbar reorder throwing uncertainty uses library feedback and does not fall back to another write', async () => {
   let count = 0;
   const view = harness('dock', {
     onUpdateDockSettings: () => { count++; throw new Error('COMMIT_UNCERTAIN'); },
@@ -257,12 +257,12 @@ test('taskbar reorder throwing uncertainty uses library feedback and does not fa
   assert.equal(view.calls.some(call => call[0] === 'local-write'), false);
 });
 
-test('taskbar size failure remains settings scoped', () => {
+test('taskbar size failure remains settings scoped', async () => {
   const view = harness('dock', {
     onUpdateDockSettings: () => { throw new Error('COMMIT_UNCERTAIN'); },
   });
   view.find(node => node.type === 'aside').props.onContextMenu(view.event());
-  view.find(node => node.props.type === 'range').props.onChange({ target: { value: '70' } });
+  await view.find(node => node.props.type === 'range').props.onChange({ target: { value: '70' } });
   assert.match(content(view.find(node => node.props.role === 'alert')), /settings.*uncertain/i);
 });
 

@@ -12,7 +12,7 @@ export interface FolderTreeSelectProps {
   language?: string;
   label?: string;
   excludedIds?: string[];
-  onCreateFolder?: (name: string, parentId?: string) => Folder;
+  onCreateFolder?: (name: string, parentId?: string) => Folder | Promise<Folder>;
   rootLabel?: string;
 }
 
@@ -32,6 +32,8 @@ export function FolderTreeSelect({
   const [expanded, setExpanded] = useState(new Set<string>());
   const [activeId, setActiveId] = useState<string | undefined>(value);
   const [creating, setCreating] = useState(false);
+  const [saving, setSaving] = useState(false);
+  const savingRef = useRef(false);
   const [name, setName] = useState('');
   const [failure, setFailure] = useState<{ cause: unknown } | null>(null);
   const error = failure ? failure.cause instanceof Error
@@ -128,14 +130,19 @@ export function FolderTreeSelect({
     }
   }
 
-  function createFolder() {
-    if (!name.trim() || !onCreateFolder) return;
+  async function createFolder() {
+    if (!name.trim() || !onCreateFolder || savingRef.current) return;
+    savingRef.current = true;
+    setSaving(true);
     try {
-      const folder = onCreateFolder(name.trim(), selectedId);
+      const folder = await onCreateFolder(name.trim(), selectedId);
       setCreated(current => [...current.filter(item => item.id !== folder.id), folder]);
       choose(folder.id);
     } catch (cause) {
       setFailure({ cause });
+    } finally {
+      savingRef.current = false;
+      setSaving(false);
     }
   }
 
@@ -255,7 +262,7 @@ export function FolderTreeSelect({
               onKeyDown={event => {
                 if (event.key === 'Enter') { event.preventDefault(); event.stopPropagation(); createFolder(); }
               }} />
-            <button type="button" disabled={!name.trim()} className={`${iconClass} text-sky-700 disabled:opacity-40 dark:text-sky-300`}
+            <button type="button" disabled={saving || !name.trim()} className={`${iconClass} text-sky-700 disabled:opacity-40 dark:text-sky-300`}
               aria-label={t('createFolder')} title={t('createFolder')} onClick={createFolder}>
               <Check size={17} aria-hidden="true" />
             </button>

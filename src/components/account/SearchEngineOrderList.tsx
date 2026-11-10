@@ -107,7 +107,7 @@ export function SearchEngineOrderList({ engines, language, onChanged, children }
     setMenu(null);
     try {
       const result = await withSearchEngineMutation(
-        () => storage.reorderSearchEngines(next, expected), () => mounted.current,
+        () => storage.mutate(() => storage.reorderSearchEngines(next, expected)), () => mounted.current,
       );
       if (!mounted.current) return;
       try { onChanged(result); }

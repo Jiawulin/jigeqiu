@@ -33,6 +33,7 @@ import { exportBookmarkHtml } from './import-export/bookmark-html-export';
 import { SEARCH_ENGINE_PRESETS } from '../data/search-engine-presets';
 import { searchEnginePresetStatus } from './search-engine-presets';
 import { createTranslator } from '../i18n';
+import { applicationStorage, mutateStorage } from './application-storage';
 
 const STORAGE_KEYS = {
   LIBRARY: 'jipage_library_v2',
@@ -100,6 +101,20 @@ export function getDomainColor(domain: string): string {
 }
 
 export class StorageManager {
+  async mutate<T>(action: () => T): Promise<T> {
+    // Business methods update optimistic baselines while staging a transaction.
+    let baselines: (string | undefined)[] | undefined;
+    try { return await mutateStorage(() => {
+      baselines = [this.pageBase, this.bookmarkBase, this.folderBase, this.desktopBase,
+        this.collectionBase, this.trashBase, this.folderTrashBase, this.dockBase];
+      return action();
+    }); }
+    catch (cause) {
+      if (baselines) [this.pageBase, this.bookmarkBase, this.folderBase, this.desktopBase,
+        this.collectionBase, this.trashBase, this.folderTrashBase, this.dockBase] = baselines;
+      throw cause;
+    }
+  }
   private pageBase: string | undefined;
   private bookmarkBase: string | undefined;
   private folderBase: string | undefined;
@@ -113,10 +128,10 @@ export class StorageManager {
 
   private sourceRaw(): string {
     return JSON.stringify({
-      [STORAGE_KEYS.LIBRARY]: localStorage.getItem(STORAGE_KEYS.LIBRARY),
-      [STORAGE_KEYS.BOOKMARKS]: localStorage.getItem(STORAGE_KEYS.BOOKMARKS),
-      [STORAGE_KEYS.FOLDERS]: localStorage.getItem(STORAGE_KEYS.FOLDERS),
-      [STORAGE_KEYS.COLLECTIONS]: localStorage.getItem(STORAGE_KEYS.COLLECTIONS),
+      [STORAGE_KEYS.LIBRARY]: applicationStorage().getItem(STORAGE_KEYS.LIBRARY),
+      [STORAGE_KEYS.BOOKMARKS]: applicationStorage().getItem(STORAGE_KEYS.BOOKMARKS),
+      [STORAGE_KEYS.FOLDERS]: applicationStorage().getItem(STORAGE_KEYS.FOLDERS),
+      [STORAGE_KEYS.COLLECTIONS]: applicationStorage().getItem(STORAGE_KEYS.COLLECTIONS),
     });
   }
 
@@ -278,10 +293,10 @@ export class StorageManager {
     });
     if (this.sourceRaw() !== source) throw new Error('CONFLICT');
     // A single setItem makes the bookmark+folder import indivisible; old keys remain untouched.
-    localStorage.setItem(STORAGE_KEYS.LIBRARY, serialized);
+    applicationStorage().setItem(STORAGE_KEYS.LIBRARY, serialized);
     let committedSource: string;
     try {
-      if (localStorage.getItem(STORAGE_KEYS.LIBRARY) !== serialized) throw new Error('COMMIT_UNCERTAIN');
+      if (applicationStorage().getItem(STORAGE_KEYS.LIBRARY) !== serialized) throw new Error('COMMIT_UNCERTAIN');
       committedSource = this.sourceRaw();
       const committed = JSON.parse(committedSource) as Record<string, string | null>;
       const original = JSON.parse(source) as Record<string, string | null>;
@@ -304,7 +319,7 @@ export class StorageManager {
 
   private safeGet<T>(key: string, fallback: T): T {
     try {
-      const data = localStorage.getItem(key);
+      const data = applicationStorage().getItem(key);
       if (!data) return fallback;
       return JSON.parse(data) as T;
     } catch (e) {
@@ -315,7 +330,7 @@ export class StorageManager {
 
   private safeSet<T>(key: string, value: T): void {
     try {
-      localStorage.setItem(key, JSON.stringify(value));
+      applicationStorage().setItem(key, JSON.stringify(value));
     } catch (e) {
       console.error(`Failed writing ${key} to localStorage:`, e);
     }
@@ -323,9 +338,9 @@ export class StorageManager {
 
   private writeRequired<T>(key: string, value: T): void {
     const serialized = JSON.stringify(value);
-    localStorage.setItem(key, serialized);
+    applicationStorage().setItem(key, serialized);
     try {
-      if (localStorage.getItem(key) !== serialized) throw new Error('COMMIT_UNCERTAIN');
+      if (applicationStorage().getItem(key) !== serialized) throw new Error('COMMIT_UNCERTAIN');
     } catch {
       // A successful write followed by a failed verification is not a rollback.
       throw new Error('COMMIT_UNCERTAIN');
@@ -418,7 +433,7 @@ export class StorageManager {
   }
 
   getBookmarkTrash(): BookmarkTrashEntry[] {
-    const trash = readBookmarkTrash(this.envelope(localStorage.getItem(STORAGE_KEYS.LIBRARY))?.bookmarkTrash);
+    const trash = readBookmarkTrash(this.envelope(applicationStorage().getItem(STORAGE_KEYS.LIBRARY))?.bookmarkTrash);
     this.trashBase ??= JSON.stringify(trash);
     return trash;
   }
@@ -606,7 +621,7 @@ export class StorageManager {
   }
 
   getFolderTrash(): FolderTrashEntry[] {
-    const entries = readFolderTrash(this.envelope(localStorage.getItem(STORAGE_KEYS.LIBRARY))?.folderTrash);
+    const entries = readFolderTrash(this.envelope(applicationStorage().getItem(STORAGE_KEYS.LIBRARY))?.folderTrash);
     this.folderTrashBase ??= JSON.stringify(entries);
     return entries;
   }
@@ -746,11 +761,11 @@ export class StorageManager {
 
   // Collections
   getCollections(): Collection[] {
-    const raw = localStorage.getItem(STORAGE_KEYS.LIBRARY);
+    const raw = applicationStorage().getItem(STORAGE_KEYS.LIBRARY);
     const data = this.envelope(raw);
     let collections: Collection[];
     try {
-      const legacy = localStorage.getItem(STORAGE_KEYS.COLLECTIONS);
+      const legacy = applicationStorage().getItem(STORAGE_KEYS.COLLECTIONS);
       collections = data && Object.hasOwn(data, 'collections')
         ? data.collections as Collection[] : legacy === null ? [] : JSON.parse(legacy);
       if (!Array.isArray(collections)) throw new Error('CORRUPT_DATA');
@@ -838,7 +853,7 @@ export class StorageManager {
   }
 
   private readSearchEnginesForMutation(): { baseline: string | null; engines: SearchEngine[] } {
-    const baseline = localStorage.getItem(STORAGE_KEYS.SEARCH_ENGINES);
+    const baseline = applicationStorage().getItem(STORAGE_KEYS.SEARCH_ENGINES);
     let data: unknown;
     try { data = baseline === null ? DEFAULT_SEARCH_ENGINES : JSON.parse(baseline); }
     catch { throw new Error('CORRUPT_DATA'); }
@@ -859,7 +874,7 @@ export class StorageManager {
     if (ids.length !== engines.length || new Set(ids).size !== ids.length
       || ids.some(id => !byId.has(id))) throw new Error('INVALID_ORDER');
     const ordered = ids.map(id => byId.get(id)!);
-    if (localStorage.getItem(STORAGE_KEYS.SEARCH_ENGINES) !== baseline) throw new Error('CONFLICT');
+    if (applicationStorage().getItem(STORAGE_KEYS.SEARCH_ENGINES) !== baseline) throw new Error('CONFLICT');
     if (JSON.stringify(currentIds) !== JSON.stringify(ids)) this.saveSearchEngines(ordered);
     return ordered;
   }
@@ -879,7 +894,7 @@ export class StorageManager {
       });
       addedCount++;
     }
-    if (localStorage.getItem(STORAGE_KEYS.SEARCH_ENGINES) !== baseline) throw new Error('CONFLICT');
+    if (applicationStorage().getItem(STORAGE_KEYS.SEARCH_ENGINES) !== baseline) throw new Error('CONFLICT');
     if (addedCount > 0) this.saveSearchEngines(engines);
     return { engines, addedCount };
   }
@@ -991,7 +1006,7 @@ export class StorageManager {
   getUserSettings(): UserSettings {
     const saved = this.safeGet<UserSettings>(STORAGE_KEYS.SETTINGS, DEFAULT_USER_SETTINGS);
     const settings: UserSettings = { ...saved, customWallpaperFit: 'cover' };
-    const data = this.envelope(localStorage.getItem(STORAGE_KEYS.LIBRARY));
+    const data = this.envelope(applicationStorage().getItem(STORAGE_KEYS.LIBRARY));
     const effective = data?.dockBookmarkIds ? { ...settings, dockBookmarkIds: data.dockBookmarkIds as string[] } : settings;
     this.dockBase ??= JSON.stringify(effective.dockBookmarkIds ?? []);
     return effective;
@@ -1104,12 +1119,10 @@ export class StorageManager {
     if (!ticket || ticket.candidate !== JSON.stringify(preview)) throw new Error('PREVIEW_STALE');
     if (this.sourceRaw() !== ticket.source) throw new Error('CONFLICT');
     if (preview.counts.bookmarks + preview.counts.folders + preview.counts.collections === 0) {
-      this.jsonPreviews.delete(preview);
       return;
     }
     const current = this.readLibrary();
     this.commitLibrary(current, preview.next, undefined, preview.next.collections);
-    this.jsonPreviews.delete(preview);
   }
 
   // Legacy direct replacement is disabled: callers must retain and confirm a preview.
@@ -1119,7 +1132,7 @@ export class StorageManager {
 
   resetAllData(): void {
     if (this.hasLibraryChanges()) throw new Error('CONFLICT');
-    Object.values(STORAGE_KEYS).forEach(key => localStorage.removeItem(key));
+    Object.values(STORAGE_KEYS).forEach(key => applicationStorage().removeItem(key));
   }
 }
 

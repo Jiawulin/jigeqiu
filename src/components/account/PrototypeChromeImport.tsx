@@ -63,9 +63,12 @@ export function PrototypeChromeImport({ onImported, language, onboarding }: Prop
     setError('');
     try {
       if (!navigator.locks?.request) { setError('LOCK_UNAVAILABLE'); return; }
-      await navigator.locks.request('jigeqiu:prototype:library-import', () => {
+      await navigator.locks.request('jigeqiu:prototype:library-import', async () => {
         if (ticket !== request.current) return;
-        storage.commitImportedLibrary(preview.base, preview.library);
+        await storage.mutate(() => {
+          if (ticket !== request.current) throw new Error('CANCELLED');
+          storage.commitImportedLibrary(preview.base, preview.library);
+        });
         committed = true;
         settledPreview.current = preview;
       });

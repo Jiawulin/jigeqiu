@@ -149,6 +149,7 @@ export async function updateProgressLocked(
   storage: ProgressStorage,
   patch: ProgressPatch,
   locks: Pick<LockManager, 'request'> | undefined,
+  mutate: <T>(action: () => T) => Promise<T> = async action => action(),
 ): Promise<ProgressWriteResult> {
   const unavailable = (): ProgressWriteResult => ({
     ...readProgress(storage), writable: false, ok: false, error: 'LOCK_UNAVAILABLE',
@@ -156,7 +157,7 @@ export async function updateProgressLocked(
   if (!locks) return unavailable();
   try {
     return await locks.request('jigeqiu:onboarding-progress', { mode: 'exclusive' }, lock =>
-      lock ? writeProgress(storage, patch) : unavailable());
+      lock ? mutate(() => writeProgress(storage, patch)) : unavailable());
   } catch {
     return unavailable();
   }
@@ -166,6 +167,7 @@ export async function updateProgressLocked(
 export async function claimWelcome(
   storage: ProgressStorage,
   locks: Pick<LockManager, 'request'> | undefined,
+  mutate: <T>(action: () => T) => Promise<T> = async action => action(),
 ): Promise<WelcomeClaimResult> {
   const unavailable: WelcomeClaimResult = { claimed: false, error: 'LOCK_UNAVAILABLE' };
   if (!locks) return unavailable;
@@ -173,7 +175,7 @@ export async function claimWelcome(
     return await locks.request(
       'jigeqiu:onboarding-progress',
       { mode: 'exclusive' },
-      (lock): WelcomeClaimResult => {
+      (lock) => mutate((): WelcomeClaimResult => {
         if (!lock) return unavailable;
         const current = readProgress(storage);
         if (current.error) return { claimed: false, error: current.error };
@@ -182,7 +184,7 @@ export async function claimWelcome(
         return result.ok
           ? { claimed: true, progress: result.progress }
           : { claimed: false, error: result.error };
-      },
+      }),
     );
   } catch {
     return unavailable;

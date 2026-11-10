@@ -41,6 +41,7 @@ function harness(language = 'en', result: Pick<JsonAssetPreview, 'counts' | 'not
     },
   };
   const storage = {
+    mutate: async (action: () => unknown) => action(),
     previewJsonAssetImport(text: string, copies: boolean) {
       calls.push(['preview', text, copies]);
       if (previewFailure) throw new Error(previewFailure);
@@ -108,7 +109,7 @@ test('commit holds shared lock, failure preserves preview, and unmount suppresse
   Object.defineProperty(globalThis, 'navigator', { configurable: true, value: {
     locks: { async request(name: string, callback: () => void) {
       assert.equal(name, 'jigeqiu:prototype:library-import');
-      callback();
+      await callback();
     } },
   } });
   try {
@@ -123,7 +124,7 @@ test('commit holds shared lock, failure preserves preview, and unmount suppresse
     await fresh.choose({ name: 'assets.json', size: 20, text: async () => 'source' });
     let release!: () => void;
     (globalThis.navigator.locks.request as any) = async (_name: string, callback: () => void) => {
-      await new Promise<void>(resolve => { release = resolve; }); callback();
+      await new Promise<void>(resolve => { release = resolve; }); await callback();
     };
     const pending = fresh.find('Confirm Import').props.onClick();
     fresh.unmount();
@@ -142,7 +143,7 @@ test('successful import commits exactly once inside the lock and only then refre
   Object.defineProperty(globalThis, 'navigator', { configurable: true, value: {
     locks: { async request(_name: string, callback: () => void) {
       h.calls.push(['locked']);
-      callback();
+      await callback();
       h.calls.push(['unlocked']);
     } },
   } });

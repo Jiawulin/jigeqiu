@@ -9,6 +9,7 @@ import { FaviconImage } from '../common/FaviconImage';
 import { Modal } from '../common/Modal';
 import { BookmarkDialog } from '../common/BookmarkDialog';
 import { refreshSiteIcon } from '../../services/site-icons';
+import { preferenceSaveError } from '../../services/preference-save-error';
 import {
   Edit3,
   ExternalLink,
@@ -42,19 +43,19 @@ interface FolderModalProps {
   onClose: () => void;
   onOpenBookmark: (bookmark: Bookmark) => void;
   onOpenBookmarkInWindow?: (bookmark: Bookmark) => void;
-  onRenameFolder: (folderId: string, newName: string) => void;
-  onRemoveFromFolder: (folderId: string, bookmarkId: string) => void;
-  onDeleteFolder: (folderId: string) => void;
+  onRenameFolder: (folderId: string, newName: string) => void | Promise<void>;
+  onRemoveFromFolder: (folderId: string, bookmarkId: string) => void | Promise<void>;
+  onDeleteFolder: (folderId: string) => void | Promise<void>;
   onSaveFolderAsCollection?: (folder: Folder) => void;
   onAddMoreBookmarks: (folderId: string) => void;
-  onToggleDockBookmark?: (bookmarkId: string) => void;
-  onUpdateBookmark?: (bookmarkId: string, updates: Partial<Bookmark>) => void;
-  onDeleteBookmark?: (bookmarkId: string) => void;
-  onMoveToFolder?: (bookmarkIds: string[], folderId: string) => void;
+  onToggleDockBookmark?: (bookmarkId: string) => boolean | void | Promise<boolean | void>;
+  onUpdateBookmark?: (bookmarkId: string, updates: Partial<Bookmark>) => void | Promise<void>;
+  onDeleteBookmark?: (bookmarkId: string) => void | Promise<void>;
+  onMoveToFolder?: (bookmarkIds: string[], folderId: string) => void | Promise<void>;
   onShowToast?: (message: string) => void;
-  onCreateFolder?: (name: string, parentId?: string) => Folder;
+  onCreateFolder?: (name: string, parentId?: string) => Folder | Promise<Folder>;
   onManageBookmark?: (bookmark: Bookmark) => void;
-  onTogglePinDesktop?: (bookmarkId: string) => void;
+  onTogglePinDesktop?: (bookmarkId: string) => void | Promise<void>;
 }
 
 export const FolderModal: React.FC<FolderModalProps> = ({
@@ -96,9 +97,18 @@ export const FolderModal: React.FC<FolderModalProps> = ({
   // Quick edit bookmark inside folder
   const [editingBookmark, setEditingBookmark] = useState<Bookmark | null>(null);
   const [error, setError] = useState('');
+  const saving = useRef(false);
   const reportError = (message: string) => {
     setError(message);
     onShowToast?.(message);
+  };
+  const runMutation = async (action: () => boolean | void | Promise<boolean | void>) => {
+    if (saving.current) return;
+    saving.current = true;
+    setError('');
+    try { await action(); }
+    catch (cause) { reportError(preferenceSaveError(cause, undefined, 'library')); }
+    finally { saving.current = false; }
   };
 
   // Listeners to dismiss context menu
@@ -137,12 +147,12 @@ export const FolderModal: React.FC<FolderModalProps> = ({
     setIsEditingName(true);
   };
 
-  const handleSaveName = () => {
+  const handleSaveName = () => runMutation(async () => {
     if (nameValue.trim() && nameValue.trim() !== folder.name) {
-      onRenameFolder(folder.id, nameValue.trim());
+      await onRenameFolder(folder.id, nameValue.trim());
     }
     setIsEditingName(false);
-  };
+  });
 
   const handleOpenContextMenu = (e: React.MouseEvent, bm: Bookmark) => {
     e.preventDefault();
@@ -174,7 +184,7 @@ export const FolderModal: React.FC<FolderModalProps> = ({
     <Modal
       isOpen={isOpen}
       onClose={() => {
-        if (editingBookmark) return;
+        if (editingBookmark || saving.current) return;
         if (contextMenu) setContextMenu(null);
         else onClose();
       }}
@@ -258,7 +268,7 @@ export const FolderModal: React.FC<FolderModalProps> = ({
                   type="button"
                   onClick={e => {
                     e.stopPropagation();
-                    onRemoveFromFolder(folder.id, bm.id);
+                    void runMutation(() => onRemoveFromFolder(folder.id, bm.id));
                   }}
                   className="absolute top-1 right-1 p-1 rounded-full text-slate-400 hover:text-rose-500 opacity-0 group-hover:opacity-100 transition-all z-10 bg-white/80 dark:bg-slate-800/80 shadow-xs cursor-pointer"
                   title="移出文件夹"
@@ -387,7 +397,7 @@ export const FolderModal: React.FC<FolderModalProps> = ({
               {onTogglePinDesktop && <button
                 onClick={() => {
                   setContextMenu(null);
-                  onTogglePinDesktop(bm.id);
+                  void runMutation(() => onTogglePinDesktop(bm.id));
                 }}
                 className="flex items-center gap-2 w-full px-2.5 py-1.5 rounded-xl text-slate-800 dark:text-slate-200 hover:bg-sky-500 hover:text-white transition-colors cursor-pointer"
               >
@@ -399,7 +409,7 @@ export const FolderModal: React.FC<FolderModalProps> = ({
                 <button
                   onClick={() => {
                     setContextMenu(null);
-                    onToggleDockBookmark(bm.id);
+                    void runMutation(() => onToggleDockBookmark(bm.id));
                   }}
                   className="flex items-center justify-between w-full px-2.5 py-1.5 rounded-xl text-slate-800 dark:text-slate-200 hover:bg-sky-500 hover:text-white transition-colors cursor-pointer group"
                 >
@@ -425,8 +435,10 @@ export const FolderModal: React.FC<FolderModalProps> = ({
               <button
                 onClick={() => {
                   setContextMenu(null);
-                  onRemoveFromFolder(folder.id, bm.id);
-                  onShowToast?.(`已将「${bm.title}」移出文件夹并恢复为独立桌面快捷方式`);
+                  void runMutation(async () => {
+                    await onRemoveFromFolder(folder.id, bm.id);
+                    onShowToast?.(`已将「${bm.title}」移出文件夹并恢复为独立桌面快捷方式`);
+                  });
                 }}
                 className="flex items-center justify-between w-full px-2.5 py-1.5 rounded-xl text-slate-800 dark:text-slate-200 hover:bg-sky-500 hover:text-white transition-colors cursor-pointer group"
               >
@@ -462,8 +474,10 @@ export const FolderModal: React.FC<FolderModalProps> = ({
                           key={c.id}
                           onClick={() => {
                             setContextMenu(null);
-                            onUpdateBookmark?.(bm.id, { category: c.id });
-                            onShowToast?.(`已将「${bm.title}」移动至分类「${c.name}」`);
+                            void runMutation(async () => {
+                              await onUpdateBookmark?.(bm.id, { category: c.id });
+                              onShowToast?.(`已将「${bm.title}」移动至分类「${c.name}」`);
+                            });
                           }}
                           className={`flex items-center justify-between w-full px-2 py-1.5 rounded-xl text-left truncate text-xs cursor-pointer transition-colors ${
                             isCurrent
@@ -506,8 +520,10 @@ export const FolderModal: React.FC<FolderModalProps> = ({
                           key={f.id}
                           onClick={() => {
                             setContextMenu(null);
-                            onMoveToFolder([bm.id], f.id);
-                            onShowToast?.(`已将「${bm.title}」移动至文件夹「${f.name}」`);
+                            void runMutation(async () => {
+                              await onMoveToFolder([bm.id], f.id);
+                              onShowToast?.(`已将「${bm.title}」移动至文件夹「${f.name}」`);
+                            });
                           }}
                           className="flex items-center gap-2 w-full px-2 py-1.5 rounded-xl text-slate-800 dark:text-slate-200 hover:bg-sky-500 hover:text-white text-left truncate text-xs cursor-pointer"
                         >
@@ -545,7 +561,7 @@ export const FolderModal: React.FC<FolderModalProps> = ({
                   onClick={() => {
                     setContextMenu(null);
                     if (confirm(`将收藏「${bm.title}」移至回收站并移除快捷方式？可在管理中心恢复收藏。`)) {
-                      onDeleteBookmark(bm.id);
+                      void runMutation(() => onDeleteBookmark(bm.id));
                     }
                   }}
                   className="flex items-center justify-between w-full px-2.5 py-1.5 rounded-xl text-rose-600 dark:text-rose-400 hover:bg-rose-500/15 transition-colors cursor-pointer font-medium"
@@ -591,8 +607,10 @@ export const FolderModal: React.FC<FolderModalProps> = ({
         <button
           onClick={() => {
             if (confirm(`确定解散文件夹「${folder.name}」吗？内部网址将保留在收藏中。`)) {
-              onDeleteFolder(folder.id);
-              onClose();
+              void runMutation(async () => {
+                await onDeleteFolder(folder.id);
+                onClose();
+              });
             }
           }}
           className="flex items-center gap-1 text-slate-400 hover:text-rose-500 transition-colors p-1 cursor-pointer"

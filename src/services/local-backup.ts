@@ -1,5 +1,8 @@
+import { applicationStorage } from './application-storage';
+
 // Emergency backup keeps raw values, including settings, without interpreting or repairing them.
 export function downloadRawLocalBackup(filename: string): void {
+  const localStorage = applicationStorage();
   const data: Record<string, string> = {};
   for (let index = 0; index < localStorage.length; index++) {
     const key = localStorage.key(index);

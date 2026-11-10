@@ -47,6 +47,7 @@ function harness(language: string | undefined, initialTab: 'bookmarks' | 'engine
     useEffect: () => {},
   };
   const storage = {
+    mutate: async (action: () => unknown) => action(),
     getSearchEngines: () => [engine],
     updateSearchEngine: () => {},
     deleteSearchEngine: () => {},
@@ -193,9 +194,9 @@ test('appearance, import/export descriptions and page actions use the selected l
   assert.match(html(harness('zh-CN', 'import-export')), /导出标准 HTML 书签文件 \(Chrome \/ Edge 适用\)/);
 });
 
-test('engine and desktop pin actions announce localized success and guard messages', () => {
+test('engine and desktop pin actions announce localized success and guard messages', async () => {
   const view = harness('en-US', 'engines');
-  findButton(view, 'Click to disable this search engine').props.onClick();
+  await findButton(view, 'Click to disable this search engine').props.onClick();
   assert.deepEqual(view.toasts, ['Disabled search engine "Google"']);
   const defaultEngine = harness('zh-CN', 'engines');
   defaultEngine.props.userSettings.defaultSearchEngineId = 'google';
@@ -203,7 +204,7 @@ test('engine and desktop pin actions announce localized success and guard messag
   assert.deepEqual(defaultEngine.toasts, ['默认搜索引擎不能停用，请先将其他引擎设为默认']);
 
   const bookmarks = harness('en-US', 'bookmarks');
-  findButton(bookmarks, 'Pin to desktop').props.onClick();
+  await findButton(bookmarks, 'Pin to desktop').props.onClick();
   assert.deepEqual(bookmarks.toasts, ['Shortcut "Reference" sent to desktop']);
 });
 
@@ -228,7 +229,7 @@ test('engine entry labels use Lucide icons and search examples use the same Chin
   }
 });
 
-test('engine deletion uses the shared modal, does not delete before confirmation and retains failed confirmation', () => {
+test('engine deletion uses the shared modal, does not delete before confirmation and retains failed confirmation', async () => {
   for (const language of ['zh', 'en']) {
     const en = language === 'en';
     const view = harness(language, 'engines');
@@ -246,11 +247,11 @@ test('engine deletion uses the shared modal, does not delete before confirmation
     assert.equal(modal.props.contained, true);
     assert.equal(modal.props.maxWidth, 'sm');
     fail = true;
-    findButton(view, en ? 'Delete engine' : '删除引擎').props.onClick();
+    await findButton(view, en ? 'Delete engine' : '删除引擎').props.onClick();
     assert.equal(deletes, 1);
     assert.ok(elements(view.render()).some(node => node.props.role === 'alert'));
     fail = false;
-    findButton(view, en ? 'Delete engine' : '删除引擎').props.onClick();
+    await findButton(view, en ? 'Delete engine' : '删除引擎').props.onClick();
     assert.equal(deletes, 2);
     assert.ok(view.toasts.includes(en ? 'Deleted search engine "Google"' : '已删除搜索引擎「Google」'));
     assert.ok(!elements(view.render()).some(node => node.props.isOpen && node.props.title === modal.props.title));

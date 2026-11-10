@@ -6,10 +6,11 @@ import {
 } from './progress';
 import type { OnboardingEntry, OnboardingEvent, OnboardingTask } from './types';
 import { hasWelcomeCookie, rememberWelcomeCookie, usesWelcomeCookie } from './welcome-cookie';
+import { applicationStorage, mutateStorage } from '../../services/application-storage';
 
 function snapshot() {
-  try { return { eligible: detectNewUser(localStorage)
-    && !(usesWelcomeCookie() && hasWelcomeCookie()), ...readProgress(localStorage) }; }
+  try { return { eligible: detectNewUser(applicationStorage())
+    && !(usesWelcomeCookie() && hasWelcomeCookie()), ...readProgress(applicationStorage()) }; }
   catch { return { eligible: false, ...readProgress({ getItem() { throw new Error(); }, setItem() {}, length: 0, key() { return null; } }) }; }
 }
 
@@ -46,7 +47,7 @@ export function useOnboarding() {
     // Cookie mode remembers exposure only, never unlocked full progress or assets.
     if (usesWelcomeCookie()) return;
     try {
-      void updateProgressLocked(localStorage, progress.current, navigator.locks).then(result => {
+      void updateProgressLocked(applicationStorage(), progress.current, navigator.locks, mutateStorage).then(result => {
         if (result.ok) progress.current = mergeProgress(progress.current, result.progress);
         else notify('save');
       }, () => notify('save'));
@@ -77,7 +78,7 @@ export function useOnboarding() {
       return;
     }
     try {
-      void claimWelcome(localStorage, navigator.locks).then(result => {
+      void claimWelcome(applicationStorage(), navigator.locks, mutateStorage).then(result => {
         if (result.progress) progress.current = mergeProgress(progress.current, result.progress);
         if (request !== welcomeRequest.current || flowRef.current.phase !== 'idle') return;
         if (result.claimed) dispatch({ type: 'welcome' });
@@ -108,8 +109,18 @@ export function useOnboarding() {
       if (flowRef.current.phase === 'welcome') dispatch({ type: 'exit' });
     };
     window.addEventListener('storage', sync);
-    return () => window.removeEventListener('storage', sync);
-  }, []);
+    const changed = () => {
+      try {
+        const external = parseProgress(applicationStorage().getItem(ONBOARDING_KEY));
+        if (external) progress.current = mergeProgress(progress.current, external);
+      } catch { notify('save'); }
+    };
+    window.addEventListener('application-storage-change', changed);
+    return () => {
+      window.removeEventListener('storage', sync);
+      window.removeEventListener('application-storage-change', changed);
+    };
+  }, [notify]);
   return {
     flow, start, exit, finish, onEvent, offerWelcome, showBackup, saveFailed, unavailable, cookieNotice,
     cancelTask: useCallback(() => {

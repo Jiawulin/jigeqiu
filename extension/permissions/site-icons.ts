@@ -4,6 +4,7 @@ import {
 } from '../../src/services/site-icons';
 import { createSiteIconPersistence } from '../../src/services/site-icon-persistence';
 import { browserPermissions, permissionFetch } from './network';
+import { applicationStorage, mutateStorage } from '../../src/services/application-storage';
 export * from '../../src/services/site-icons';
 
 function loadImage(source: string, signal: AbortSignal): Promise<void> {
@@ -53,8 +54,10 @@ const service = createSiteIconService({
   load,
   persistence: createSiteIconPersistence(),
   preferences: {
-    getItem: (key) => localStorage.getItem(key),
-    setItem: (key, value) => localStorage.setItem(key, value),
+    getItem: (key) => applicationStorage().getItem(key),
+    setItem: (key, value) => {
+      if (applicationStorage().getItem(key) !== value) applicationStorage().setItem(key, value);
+    },
   },
   createObjectURL: (blob) => URL.createObjectURL(blob),
   revokeObjectURL: (url) => URL.revokeObjectURL(url),
@@ -71,5 +74,12 @@ export const watchSiteIcon = service.watchSiteIcon;
 export const refreshSiteIcon = service.refreshSiteIcon;
 export const clearSiteIconCache = service.clearSiteIconCache;
 export const getThirdPartyIconsEnabled = service.getThirdPartyIconsEnabled;
-export const setThirdPartyIconsEnabled = service.setThirdPartyIconsEnabled;
+export const setThirdPartyIconsEnabled = async (enabled: boolean): Promise<void> => {
+  await mutateStorage(() => applicationStorage().setItem('jigeqiu.site-icons.third-party.v1', String(enabled)));
+  service.setThirdPartyIconsEnabled(enabled);
+};
+window.addEventListener('application-storage-change', () => {
+  try { service.setThirdPartyIconsEnabled(applicationStorage().getItem('jigeqiu.site-icons.third-party.v1') === 'true'); }
+  catch { /* Keep the last committed preference when storage is unavailable. */ }
+});
 export const subscribeIconPreferences = service.subscribeIconPreferences;

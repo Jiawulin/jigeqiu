@@ -52,7 +52,7 @@ interface DesktopViewProps {
   showDock?: boolean;
   language?: string;
   desktopLayout?: Layout | null;
-  onDesktopAction?: (actions: DesktopAction[]) => void;
+  onDesktopAction?: (actions: DesktopAction[]) => void | Promise<void>;
   onOpenDesktopFolder?: (id: string) => void;
   onInteractionChange?: (active: boolean) => void;
   interactionBlocked?: boolean;
@@ -185,17 +185,17 @@ export const DesktopView: React.FC<DesktopViewProps> = ({
     if (!desktopLayout || !onDesktopAction) throw new Error('DESKTOP_ACTION_UNAVAILABLE');
     return { layout: desktopLayout, apply: onDesktopAction };
   };
-  const execute = (actions: DesktopAction[]) => {
+  const execute = async (actions: DesktopAction[]) => {
     try {
-      requireDesktopAction().apply(actions);
+      await requireDesktopAction().apply(actions);
       setOperationError('');
     } catch (cause) {
       setOperationError(desktopError(cause));
       throw cause;
     }
   };
-  const safely = (action: () => void) => {
-    try { action(); } catch (error) { setOperationError(desktopError(error)); }
+  const safely = async (action: () => void | Promise<void>) => {
+    try { await action(); } catch (error) { setOperationError(desktopError(error)); }
   };
   const pages = paginateDesktopItems(items, grid.pageSize);
   const totalPages = pages.length;
@@ -410,23 +410,23 @@ export const DesktopView: React.FC<DesktopViewProps> = ({
     requireDesktopAction();
     setCreatingGroup([...ids]);
   };
-  const saveGroup = (name: string) => {
+  const saveGroup = async (name: string) => {
     if (!desktopLayout || creatingGroup === null) throw new Error('CONFLICT');
     const shortcutIds = creatingGroup.map(id => desktopLayout.shortcuts.find(shortcut => shortcut.bookmarkId === id)?.id).filter((id): id is string => !!id);
     const selected = new Set(shortcutIds);
     const first = desktopLayout.root.findIndex(ref => ref.kind === 'shortcut' && selected.has(ref.id));
-    execute([{ type: 'desktop.folder.create', id: crypto.randomUUID(), name, shortcutIds, index: Math.max(0, first) }]);
+    await execute([{ type: 'desktop.folder.create', id: crypto.randomUUID(), name, shortcutIds, index: Math.max(0, first) }]);
     setSelectedIds([]);
     setIsEditing(false);
   };
-  const dropOnPage = (index: number) => {
+  const dropOnPage = async (index: number) => {
     const sourceId = draggedIdRef.current;
     if (!sourceId) return;
     try {
       const { layout } = requireDesktopAction();
       const ref = refForId(sourceId);
       if (!ref) return clearDrag();
-      execute([{ type: 'desktop.move', ref, to: {
+      await execute([{ type: 'desktop.move', ref, to: {
         kind: 'root', index: Math.min(index * grid.pageSize, layout.root.length - (externalDrag.current ? 0 : 1)),
       } }]);
       completeDrag();
@@ -459,7 +459,7 @@ export const DesktopView: React.FC<DesktopViewProps> = ({
       }, 450) };
     }
   };
-  const dropOnGrid = (event: React.DragEvent) => {
+  const dropOnGrid = async (event: React.DragEvent) => {
     event.preventDefault();
     event.stopPropagation();
     const sourceId = draggedIdRef.current;
@@ -472,16 +472,16 @@ export const DesktopView: React.FC<DesktopViewProps> = ({
       const item = destination.mergeId ? items.find(item => item.data.id === destination.mergeId) : null;
       const target = item ? refForId(item.data.id) : null;
       if (source.kind === 'shortcut' && item?.type === 'folder') {
-        execute([{ type: 'desktop.move', ref: source, to: { kind: 'folder', folderId: item.data.id, index: item.data.bookmarkIds.length } }]);
+        await execute([{ type: 'desktop.move', ref: source, to: { kind: 'folder', folderId: item.data.id, index: item.data.bookmarkIds.length } }]);
       } else if (source.kind === 'shortcut' && target?.kind === 'shortcut' && item?.type === 'bookmark') {
         const selected = new Set([source.id, target.id]);
         const targetIndex = layout.root.findIndex(ref => sameRef(ref, target));
         const index = layout.root.slice(0, targetIndex).filter(ref => !(ref.kind === 'shortcut' && selected.has(ref.id))).length;
-        execute([{ type: 'desktop.folder.create', id: crypto.randomUUID(), name: `${item.data.title}等`, shortcutIds: [target.id, source.id], index }]);
+        await execute([{ type: 'desktop.folder.create', id: crypto.randomUUID(), name: `${item.data.title}等`, shortcutIds: [target.id, source.id], index }]);
       } else {
         const sourceIndex = layout.root.findIndex(ref => sameRef(ref, source));
         const index = desktopInsertionIndex(sourceIndex, destination.slot, layout.root.length);
-        if (index !== sourceIndex) execute([{ type: 'desktop.move', ref: source, to: { kind: 'root', index } }]);
+        if (index !== sourceIndex) await execute([{ type: 'desktop.move', ref: source, to: { kind: 'root', index } }]);
       }
       completeDrag();
     } catch (error) { failDrag(error); }
@@ -716,8 +716,8 @@ export const DesktopView: React.FC<DesktopViewProps> = ({
                 x: rect.left, y: rect.bottom, title: actionTerm('removeDesktop', language),
                 message: text(`移除 ${selectedIds.length} 个桌面快捷方式？原收藏和归档目录保持不变。`, `Remove ${selectedIds.length} desktop shortcuts? Library bookmarks are kept.`),
                 label: text('确认移除快捷方式', 'Confirm shortcut removal'),
-                action: () => {
-                  execute(selectedIds.map(bookmarkId => ({ type: 'desktop.unpin', bookmarkId })));
+                action: async () => {
+                  await execute(selectedIds.map(bookmarkId => ({ type: 'desktop.unpin', bookmarkId })));
                   setSelectedIds([]);
                 },
               });
@@ -968,13 +968,13 @@ export const DesktopView: React.FC<DesktopViewProps> = ({
         }}>
         <form role="dialog" aria-modal="true" aria-label={text('移动桌面快捷方式', 'Move desktop shortcut')}
           className="desktop-dialog-surface w-full max-w-sm p-5 rounded-lg liquid-glass"
-          onClick={event => event.stopPropagation()} onSubmit={event => {
+          onClick={event => event.stopPropagation()} onSubmit={async event => {
             event.preventDefault();
             try {
               const shortcut = desktopLayout.shortcuts.find(shortcut => shortcut.bookmarkId === moveBookmark.id);
               const folder = desktopLayout.folders.find(folder => folder.id === moveFolderId);
               if (!shortcut || !folder) throw new Error('INVALID_REFERENCE');
-              execute([{ type: 'desktop.move', ref: { kind: 'shortcut', id: shortcut.id }, to: {
+              await execute([{ type: 'desktop.move', ref: { kind: 'shortcut', id: shortcut.id }, to: {
                 kind: 'folder', folderId: folder.id, index: folder.shortcutIds.filter(id => id !== shortcut.id).length,
               } }]);
               setMoveBookmark(null);
@@ -998,8 +998,8 @@ export const DesktopView: React.FC<DesktopViewProps> = ({
       {editingBookmark && <BookmarkDialog isOpen bookmark={editingBookmark}
         folders={folders} existingBookmarks={bookmarks} language={language}
         onClose={() => setEditingBookmark(null)}
-        onSave={input => {
-          commitAndRefresh(() => storage.saveManualBookmark(input, editingBookmark.id), onLibraryChanged);
+        onSave={async input => {
+          await commitAndRefresh(() => storage.saveManualBookmark(input, editingBookmark.id), onLibraryChanged);
           onShowToast?.(text('已更新收藏', 'Bookmark updated'));
         }}
         onCreateFolder={(name, parentId) => {
@@ -1014,10 +1014,10 @@ export const DesktopView: React.FC<DesktopViewProps> = ({
           onKeyDown={event => { if (event.key === 'Escape') { event.stopPropagation(); setEditingBookmark(null); setEditingFolder(null); } }}>
           <form role="dialog" aria-modal="true" aria-label={text('重命名文件夹', 'Rename folder')}
             className="desktop-dialog-surface w-full max-w-sm max-h-[90dvh] overflow-y-auto rounded-lg liquid-glass p-5"
-            onClick={event => event.stopPropagation()} onSubmit={event => {
+            onClick={event => event.stopPropagation()} onSubmit={async event => {
               event.preventDefault();
               try {
-                if (folderName.trim()) execute([{ type: 'desktop.folder.rename', id: editingFolder.id, name: folderName.trim() }]);
+                if (folderName.trim()) await execute([{ type: 'desktop.folder.rename', id: editingFolder.id, name: folderName.trim() }]);
                 setEditingBookmark(null); setEditingFolder(null);
               } catch (error) { setEditError(desktopError(error)); }
             }}>

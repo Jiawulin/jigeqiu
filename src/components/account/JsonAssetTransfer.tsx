@@ -97,10 +97,13 @@ export function JsonAssetTransfer({ onImported, language = 'zh' }: Props) {
     setError('');
     try {
       if (!navigator.locks?.request) throw new Error('LOCK_UNAVAILABLE');
-      await navigator.locks.request('jigeqiu:prototype:library-import', () => {
+      await navigator.locks.request('jigeqiu:prototype:library-import', async () => {
         // A queued lock must not write after this section has unmounted.
         if (ticket !== request.current) return;
-        storage.commitJsonAssetImport(preview);
+        await storage.mutate(() => {
+          if (ticket !== request.current) throw new Error('CANCELLED');
+          storage.commitJsonAssetImport(preview);
+        });
         committed = true;
         settledPreview.current = preview;
       });

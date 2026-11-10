@@ -9,11 +9,12 @@ export function PrivacyPage({
   onContinue,
 }: {
   initial?: boolean;
-  onContinue?: () => void;
+  onContinue?: () => void | Promise<void>;
 }) {
   const [declined, setDeclined] = useState(false);
   const [error, setError] = useState('');
   const [details, setDetails] = useState(false);
+  const [busy, setBusy] = useState(false);
   return (
     <main className="extension-privacy-page">
       <header>
@@ -64,15 +65,18 @@ export function PrivacyPage({
               <button
                 type="button"
                 className="privacy-primary"
-                onClick={() => {
+                disabled={busy}
+                onClick={async () => {
+                  if (busy) return;
+                  setBusy(true);
                   setError('');
                   try {
-                    onContinue?.();
+                    await onContinue?.();
                   } catch {
                     setError(
                       '无法保存本地告知记录，未进入工作台。请检查浏览器存储权限后重试。',
                     );
-                  }
+                  } finally { setBusy(false); }
                 }}
               >
                 <Check size={16} />

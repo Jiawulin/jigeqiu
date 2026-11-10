@@ -68,12 +68,12 @@ interface UserCenterViewProps {
   searchEngines: SearchEngine[];
   userSettings: UserSettings;
   onSearchEnginesChanged: (engines: SearchEngine[]) => void;
-  onUpdateSettings: (settings: Partial<UserSettings>) => boolean | void;
+  onUpdateSettings: (settings: Partial<UserSettings>) => boolean | void | Promise<boolean | void>;
   onShowToast: (message: string, actionText?: string, onAction?: () => void) => void;
   /** Read and publish the saved library only; this notification must never write. */
   onLibraryChanged: () => void;
   desktopBookmarkIds?: string[];
-  onSetDesktopPins: (ids: string[], pinned: boolean) => void;
+  onSetDesktopPins: (ids: string[], pinned: boolean) => void | Promise<void>;
 }
 
 export const UserCenterView: React.FC<UserCenterViewProps> = ({
@@ -186,12 +186,12 @@ export const UserCenterView: React.FC<UserCenterViewProps> = ({
     engineEditorGeneration.current++;
     return () => { engineEditorGeneration.current++; };
   }, [activeTab, isAddEngineOpen, editingEngine?.id, pendingDeleteEngine?.id]);
-  const runEngineMutation = (action: () => void, onError: (error: unknown) => void) => {
+  const runEngineMutation = (action: () => void | Promise<void>, onError: (error: unknown) => void) => {
     if (engineMutationPending.current) return;
     engineMutationPending.current = true;
     const generation = engineEditorGeneration.current;
-    void withSearchEngineMutation(() => {
-      try { action(); } catch (error) { onError(error); }
+    return withSearchEngineMutation(async () => {
+      try { await action(); } catch (error) { onError(error); }
       finally { engineMutationPending.current = false; }
     }, () => folderRemovalMounted.current && engineEditorGeneration.current === generation).catch(error => {
       engineMutationPending.current = false;
@@ -314,13 +314,13 @@ export const UserCenterView: React.FC<UserCenterViewProps> = ({
   };
 
   // Handle Desktop Shortcut Toggle (发送到桌面 / 从桌面移除)
-  const handleToggleDesktopShortcut = (bmId: string) => {
+  const handleToggleDesktopShortcut = async (bmId: string) => {
     const bm = bookmarks.find(b => b.id === bmId);
     if (!bm) return;
 
     const willPin = !isDesktopPinned(bm);
     try {
-      onSetDesktopPins([bmId], willPin);
+      await onSetDesktopPins([bmId], willPin);
       onShowToast(willPin ? t('managerDesktopShortcutAdded', { name: bm.title }) : t('managerDesktopShortcutRemoved'));
     } catch (error) {
       onShowToast(preferenceSaveError(error, userSettings.language, 'library'));
@@ -328,11 +328,11 @@ export const UserCenterView: React.FC<UserCenterViewProps> = ({
   };
 
   // Handle Dock Shortcut Toggle (固定到程序坞 / 从程序坞移除)
-  const handleToggleDockPin = (bmId: string) => {
+  const handleToggleDockPin = async (bmId: string) => {
     const current = userSettings.dockBookmarkIds || [];
     const isPinned = current.includes(bmId);
     const next = isPinned ? current.filter(id => id !== bmId) : [...current, bmId];
-    if (onUpdateSettings({ dockBookmarkIds: next }) === false) return;
+    if (await onUpdateSettings({ dockBookmarkIds: next }) === false) return;
     onShowToast(t(isPinned ? 'managerTaskbarUnpinnedToast' : 'managerTaskbarPinnedToast'));
   };
 
@@ -395,10 +395,10 @@ export const UserCenterView: React.FC<UserCenterViewProps> = ({
   };
 
   // Batch Send to Desktop as Shortcuts
-  const handleBatchPinToDesktop = (pinned: boolean) => {
+  const handleBatchPinToDesktop = async (pinned: boolean) => {
     if (selectedBmIds.length === 0) return;
     try {
-      onSetDesktopPins(selectedBmIds, pinned);
+      await onSetDesktopPins(selectedBmIds, pinned);
       onShowToast(pinned
         ? t('managerDesktopShortcutsAdded', { count: selectedBmIds.length })
         : t('managerDesktopShortcutRemoved'));
@@ -468,8 +468,8 @@ export const UserCenterView: React.FC<UserCenterViewProps> = ({
       onShowToast(t('managerEngineCannotDisableDefault'));
       return;
     }
-    runEngineMutation(() => {
-      storage.updateSearchEngine(engineId, { isEnabled: !currentEnabled });
+    return runEngineMutation(async () => {
+      await storage.mutate(() => storage.updateSearchEngine(engineId, { isEnabled: !currentEnabled }));
       onSearchEnginesChanged(storage.getSearchEngines());
       onShowToast(t(currentEnabled ? 'managerEngineDisabledToast' : 'managerEngineEnabledToast', { name: eng.name }));
     }, error => onShowToast(preferenceSaveError(error, userSettings.language)));
@@ -483,7 +483,8 @@ export const UserCenterView: React.FC<UserCenterViewProps> = ({
       return;
     }
     setEngineSaveError(null);
-    runEngineMutation(() => {
+    return runEngineMutation(async () => {
+      await storage.mutate(() => {
       if (editingEngine) {
         storage.updateSearchEngine(editingEngine.id, {
           name: engineFormName.trim(),
@@ -499,6 +500,7 @@ export const UserCenterView: React.FC<UserCenterViewProps> = ({
           engineFormEnabled
         );
       }
+      });
       onSearchEnginesChanged(storage.getSearchEngines());
       onShowToast(t(editingEngine ? 'managerEngineUpdatedToast' : 'managerEngineAddedToast', {
         name: engineFormName.trim(),
@@ -527,9 +529,9 @@ export const UserCenterView: React.FC<UserCenterViewProps> = ({
     }
     setDeleteEngineError(null);
     setDeleteEngineBusy(true);
-    runEngineMutation(() => {
+    return runEngineMutation(async () => {
       try {
-        storage.deleteSearchEngine(pendingDeleteEngine.id);
+        await storage.mutate(() => storage.deleteSearchEngine(pendingDeleteEngine.id));
         onSearchEnginesChanged(storage.getSearchEngines());
         onShowToast(t('managerEngineDeletedToast', { name: pendingDeleteEngine.name }));
         setPendingDeleteEngine(null);
@@ -578,9 +580,9 @@ export const UserCenterView: React.FC<UserCenterViewProps> = ({
     }
   };
 
-  const handleCreateLibraryFolder = (name: string, parentId?: string): Folder => {
+  const handleCreateLibraryFolder = async (name: string, parentId?: string): Promise<Folder> => {
     try {
-      const created = commitAndRefresh(() => storage.createFolder(name, [], parentId), onLibraryChanged);
+      const created = await commitAndRefresh(() => storage.createFolder(name, [], parentId), onLibraryChanged);
       if (parentId) setExpandedFolderIds(prev => new Set([...prev, parentId]));
       return created;
     } catch (error) {
@@ -588,11 +590,11 @@ export const UserCenterView: React.FC<UserCenterViewProps> = ({
     }
   };
 
-  const handleSaveBookmark = (
+  const handleSaveBookmark = async (
     input: Omit<Bookmark, 'id' | 'createdAt' | 'updatedAt'>,
     pinToDesktop: boolean,
   ) => {
-    commitAndRefresh(() => storage.saveManualBookmark(input, editingBookmark?.id), onLibraryChanged);
+    await commitAndRefresh(() => storage.saveManualBookmark(input, editingBookmark?.id), onLibraryChanged);
     setEditingBookmark(null);
     setIsAddBookmarkOpen(false);
     onShowToast(t(editingBookmark ? 'bookmarkUpdated' : pinToDesktop
@@ -637,10 +639,10 @@ export const UserCenterView: React.FC<UserCenterViewProps> = ({
             <button type="button" disabled={folderRemovalBusy} onClick={() => setRemovingFolder(null)}
               className="rounded-md border border-slate-300 px-3 py-2 text-sm dark:border-white/20">
               {t('cancel')}</button>
-            <button type="button" disabled={folderRemovalBusy} onClick={() => void removeLibraryFolder('dissolve')}
+            <button type="button" disabled={folderRemovalBusy} onClick={() => removeLibraryFolder('dissolve')}
               className="inline-flex items-center gap-2 rounded-md border border-slate-300 px-3 py-2 text-sm disabled:opacity-50 dark:border-white/20">
               <FolderOpen size={15} />{t('dissolveKeepContents')}</button>
-            <button type="button" disabled={folderRemovalBusy} onClick={() => void removeLibraryFolder('trash')}
+            <button type="button" disabled={folderRemovalBusy} onClick={() => removeLibraryFolder('trash')}
               className="inline-flex items-center gap-2 rounded-md bg-rose-700 px-3 py-2 text-sm text-white disabled:opacity-50">
               <Trash2 size={15} />{t('deleteFolderContents')}</button>
           </div>
@@ -1395,8 +1397,8 @@ export const UserCenterView: React.FC<UserCenterViewProps> = ({
                       {!isDefault && isEnabled && (
                         <button
                           type="button"
-                          onClick={() => {
-                            if (onUpdateSettings({ defaultSearchEngineId: eng.id }) === false) return;
+                          onClick={async () => {
+                            if (await onUpdateSettings({ defaultSearchEngineId: eng.id }) === false) return;
                             onShowToast(t('managerEngineSetDefaultToast', { name: eng.name }));
                           }}
                           className="px-2.5 py-1 rounded-xl bg-black/5 dark:bg-white/10 hover:bg-sky-500 hover:text-white transition-colors cursor-pointer text-xs font-medium"

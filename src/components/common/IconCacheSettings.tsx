@@ -18,14 +18,16 @@ export function IconCacheSettings({ language = 'zh' }: { language?: string }) {
       <span>{t('iconSettingsAllow')}</span>
       <input type="checkbox" role="switch" checked={enabled} disabled={busy}
         className="h-4 w-4 shrink-0 cursor-pointer accent-sky-600"
-        onChange={event => {
+        onChange={async event => {
+          const checked = event.target.checked;
+          setBusy(true);
           setMessage('');
           setFailed(false);
-          try { setThirdPartyIconsEnabled(event.target.checked); }
+          try { await setThirdPartyIconsEnabled(checked); }
           catch {
             setFailed(true);
             setMessage('iconSettingsSaveFailed');
-          }
+          } finally { setBusy(false); }
         }} />
     </label>
     <p className="text-[11px] leading-relaxed text-slate-500 dark:text-slate-400">

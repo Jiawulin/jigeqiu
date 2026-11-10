@@ -60,7 +60,7 @@ interface BottomDockProps {
     dockIconSize?: number;
     showDock?: boolean;
     dockBookmarkIds?: string[];
-  }) => boolean | void;
+  }) => boolean | void | Promise<boolean | void>;
   onToggleDockBookmark?: (bookmarkId: string) => void;
   onTogglePinDesktop?: (bookmarkId: string) => void;
   onEditBookmark?: (bm: Bookmark) => void;
@@ -157,13 +157,13 @@ export const BottomDock: React.FC<BottomDockProps> = ({
     setError(message);
     onShowToast?.(message);
   };
-  const saveDockSettings = (updates: Parameters<NonNullable<BottomDockProps['onUpdateDockSettings']>>[0]): boolean => {
+  const saveDockSettings = async (updates: Parameters<NonNullable<BottomDockProps['onUpdateDockSettings']>>[0]): Promise<boolean> => {
     try {
       // A supplied parent owns persistence and failure feedback; never write twice.
       if (onUpdateDockSettings) {
-        if (onUpdateDockSettings(updates) === false) return false;
+        if (await onUpdateDockSettings(updates) === false) return false;
       } else {
-        storage.saveUserSettings(updates);
+        await storage.mutate(() => storage.saveUserSettings(updates));
       }
       setError('');
       return true;
@@ -173,8 +173,8 @@ export const BottomDock: React.FC<BottomDockProps> = ({
       return false;
     }
   };
-  const saveIconSize = (size: number): boolean => {
-    const saved = saveDockSettings({ dockIconSize: size });
+  const saveIconSize = async (size: number): Promise<boolean> => {
+    const saved = await saveDockSettings({ dockIconSize: size });
     if (saved) committedSizeRef.current = size;
     currentSizeRef.current = committedSizeRef.current;
     setIconSize(committedSizeRef.current);
@@ -287,12 +287,12 @@ export const BottomDock: React.FC<BottomDockProps> = ({
       setIconSize(newSize);
     };
 
-    const handleMouseUp = () => {
+    const handleMouseUp = async () => {
       setIsResizing(false);
       window.removeEventListener('mousemove', handleMouseMove);
       window.removeEventListener('mouseup', handleMouseUp);
       const finalSize = currentSizeRef.current;
-      saveIconSize(finalSize);
+      await saveIconSize(finalSize);
     };
 
     window.addEventListener('mousemove', handleMouseMove);
@@ -850,9 +850,9 @@ export const BottomDock: React.FC<BottomDockProps> = ({
                 min="34"
                 max="74"
                 value={iconSize}
-                onChange={e => {
+                onChange={async e => {
                   const val = Number(e.target.value);
-                  saveIconSize(val);
+                  await saveIconSize(val);
                 }}
                 className="w-full accent-sky-500 cursor-pointer h-1.5 bg-slate-200 dark:bg-white/10 rounded-lg"
               />
@@ -865,8 +865,8 @@ export const BottomDock: React.FC<BottomDockProps> = ({
 
             {/* Hide Dock Option */}
             <button
-              onClick={() => {
-                if (saveDockSettings({ showDock: false })) setDockSettingsMenu(null);
+              onClick={async () => {
+                if (await saveDockSettings({ showDock: false })) setDockSettingsMenu(null);
               }}
               className="flex items-center gap-2 w-full px-2.5 py-2 rounded-xl text-slate-800 dark:text-slate-200 hover:bg-sky-500 hover:text-white transition-colors cursor-pointer"
             >
@@ -877,8 +877,8 @@ export const BottomDock: React.FC<BottomDockProps> = ({
             {/* Reset Size */}
             <div className="pt-1 mt-1 border-t border-slate-200/60 dark:border-white/10">
               <button
-                onClick={() => {
-                  if (handleResetSize()) setDockSettingsMenu(null);
+                onClick={async () => {
+                  if (await handleResetSize()) setDockSettingsMenu(null);
                 }}
                 className="flex items-center gap-2 w-full px-2.5 py-1.5 rounded-xl text-slate-600 dark:text-slate-400 hover:text-sky-600 dark:hover:text-sky-400 hover:bg-black/5 dark:hover:bg-white/10 transition-colors cursor-pointer"
               >
