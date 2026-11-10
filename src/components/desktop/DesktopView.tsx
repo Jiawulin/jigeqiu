@@ -22,7 +22,7 @@ import { bookmarkLibraryPath } from '../common/folder-tree';
 import { createDesktopGesture, createWheelGesture, rubberBand, WHEEL_GESTURE_IDLE_MS } from './desktop-gestures';
 import { LaunchpadMark } from '../common/LaunchpadMark';
 import './desktop-touch.css';
-import { desktopPageKeyStep } from './desktop-keyboard';
+import { desktopArrowKey, desktopNavigationIndex } from './desktop-keyboard';
 import { DesktopConfirmPopover, type DesktopConfirmation } from './DesktopConfirmPopover';
 import { DesktopCreateFolderDialog } from './DesktopCreateFolderDialog';
 import { FOLDER_DRAG_START, FOLDER_DRAG_CANCEL, finishFolderDrag, type FolderDragStart } from './desktop-drag-transfer';
@@ -82,6 +82,9 @@ export const DesktopView: React.FC<DesktopViewProps> = ({
   const [selectedIds, setSelectedIds] = useState<string[]>([]);
   const [currentPage, setCurrentPage] = useState(0);
   const viewportRef = useRef<HTMLDivElement>(null);
+  const [pageFocus, setPageFocus] = useState<Record<number, string>>({});
+  const focusedIcon = useRef<HTMLElement | null>(null);
+  const pendingFocus = useRef<string | null>(null);
   const [size, setSize] = useState({ width: 960, height: 348 });
   const [menu, setMenu] = useState<{ x: number; y: number; target: MenuTarget } | null>(null);
   const menuRef = useRef<HTMLDivElement>(null);
@@ -200,6 +203,24 @@ export const DesktopView: React.FC<DesktopViewProps> = ({
   const pages = paginateDesktopItems(items, grid.pageSize);
   const totalPages = pages.length;
   const pageIndex = Math.min(currentPage, totalPages - 1);
+  const pageItems = pages[pageIndex];
+  const tabStopId = pageItems.find(item => item.data.id === pageFocus[pageIndex])?.data.id
+    ?? pageItems[0]?.data.id;
+  // Paging, removals and responsive repagination must not leave focus on an inert or removed icon.
+  useLayoutEffect(() => {
+    const previous = focusedIcon.current;
+    const needsRepair = previous && (!previous.isConnected || previous.closest('[inert]'));
+    const id = pendingFocus.current ?? (needsRepair ? tabStopId : null);
+    pendingFocus.current = null;
+    if (isEditing || (!id && !needsRepair)) return;
+    const viewport = viewportRef.current;
+    const target = id ? viewport?.querySelector<HTMLElement>(`[data-desktop-id="${CSS.escape(id)}"]`) : null;
+    if (target && !target.closest('[inert]')) target.focus({ preventScroll: true });
+    else if (needsRepair) {
+      focusedIcon.current = null;
+      viewport?.focus({ preventScroll: true });
+    }
+  });
   useEffect(() => {
     const index = items.findIndex(item => item.type === 'bookmark' && item.data.id === revealBookmarkId);
     if (index >= 0) setCurrentPage(Math.floor(index / grid.pageSize));
@@ -215,13 +236,20 @@ export const DesktopView: React.FC<DesktopViewProps> = ({
   useEffect(() => () => onInteractionChange?.(false), [onInteractionChange]);
   useEffect(() => {
     const key = (event: KeyboardEvent) => {
-      const step = desktopPageKeyStep(event, interactionBlocked || isEditing || !!draggedId || !!menu || !!gesture.current);
-      if (!step || totalPages <= 1) return;
+      const arrow = desktopArrowKey(event, !!interactionBlocked || isEditing || !!draggedId || !!menu || !!gesture.current);
+      if (!arrow) return;
       const controls = 'input,textarea,select,[contenteditable]:not([contenteditable="false"]),'
         + '[role="textbox"],[role="combobox"],[role="slider"],[role="spinbutton"],'
         + '[role="listbox"],[role="tree"],[role="tablist"],iframe,video,audio';
       const target = event.target instanceof Element ? event.target : null;
       if (target?.closest(controls) || document.activeElement?.closest(controls)) return;
+      const viewport = viewportRef.current;
+      const outsideControl = (element: Element | null) => {
+        const control = element?.closest('button,a[href],[role="button"],[tabindex]');
+        return control && control !== viewport
+          && !(control.hasAttribute('data-desktop-id') && viewport?.contains(control));
+      };
+      if (outsideControl(target) || outsideControl(document.activeElement)) return;
       const overlay = [...document.querySelectorAll<HTMLElement>(
         '[role="dialog"],[role="alertdialog"],[aria-modal="true"],[role="menu"],.desktop-window',
       )].some(element => {
@@ -230,15 +258,28 @@ export const DesktopView: React.FC<DesktopViewProps> = ({
         return style.visibility !== 'hidden' && (!element.matches('.desktop-window') || style.pointerEvents !== 'none');
       });
       if (overlay) return;
+      const active = document.activeElement;
+      const focusedIndex = active instanceof HTMLElement && viewport?.contains(active)
+        && !active.closest('[inert]') && active.hasAttribute('data-desktop-id')
+        ? items.findIndex(item => item.data.id === active.dataset.desktopId) : -1;
+      const next = desktopNavigationIndex(arrow, focusedIndex, pageIndex, grid.columns, grid.pageSize, items.length);
+      if (next === null) return;
       event.preventDefault();
-      setCurrentPage(page => Math.max(0, Math.min(totalPages - 1, page + step)));
+      const id = items[next].data.id;
+      const nextPage = Math.floor(next / grid.pageSize);
+      if (nextPage !== pageIndex) {
+        pendingFocus.current = id;
+        setCurrentPage(nextPage);
+      } else {
+        viewport?.querySelector<HTMLElement>(`[data-desktop-id="${CSS.escape(id)}"]`)?.focus({ preventScroll: true });
+      }
       if (wheelEnd.current) clearTimeout(wheelEnd.current);
       setWheeling(false);
       setDragOffset(0);
     };
     window.addEventListener('keydown', key);
     return () => window.removeEventListener('keydown', key);
-  }, [totalPages, isEditing, draggedId, menu, interactionBlocked]);
+  }, [pageIndex, grid.columns, grid.pageSize, items, isEditing, draggedId, menu, interactionBlocked]);
   useEffect(() => {
     const viewport = viewportRef.current;
     if (!viewport) return;
@@ -733,7 +774,7 @@ export const DesktopView: React.FC<DesktopViewProps> = ({
           </button>
         </div>
       </div>
-      <div ref={viewportRef} data-onboarding="desktop" data-testid="desktop-viewport" tabIndex={0} aria-label={text('桌面图标区域', 'Desktop icons')}
+      <div ref={viewportRef} data-onboarding="desktop" data-testid="desktop-viewport" tabIndex={isEditing ? 0 : -1} aria-label={text('桌面图标区域', 'Desktop icons')}
         className="relative overflow-hidden w-full touch-none overscroll-x-none outline-none" style={{ height: size.height }}
         onContextMenu={event => openMenu(event, { type: 'background' })}>
         <div className="desktop-gesture-track flex h-full items-start" style={{
@@ -761,7 +802,12 @@ export const DesktopView: React.FC<DesktopViewProps> = ({
                     ? itemIndex === localSlot ? shiftSize : itemIndex === localSlot - 1 ? -shiftSize : 0 : 0;
                   return (
                     <div key={id} className="group/item relative w-full min-w-0 flex justify-center">
-                      <div role="button" tabIndex={0} data-desktop-id={id} aria-label={name}
+                      <div role="button" tabIndex={isEditing || (index === pageIndex && id === tabStopId) ? 0 : -1} data-desktop-id={id} aria-label={name}
+                        onFocus={event => {
+                          focusedIcon.current = event.currentTarget;
+                          setPageFocus(previous => previous[index] === id ? previous : { ...previous, [index]: id });
+                        }}
+                        onBlur={() => { focusedIcon.current = null; }}
                         data-onboarding-target={revealBookmarkId === id || undefined}
                         aria-pressed={isEditing && item.type === 'bookmark' ? selected : undefined}
                         draggable={item.type !== 'tool' && !isEditing && !!desktopLayout}
@@ -780,6 +826,10 @@ export const DesktopView: React.FC<DesktopViewProps> = ({
                         data-drop-state={merging ? 'merge' : undefined}
                         style={{ transform: `translateX(${shift}px)` }}
                         onKeyDown={event => {
+                          if (event.nativeEvent.isComposing || event.keyCode === 229) {
+                            if (event.key === 'Enter' || event.key === ' ') event.preventDefault();
+                            return;
+                          }
                           if (event.key === 'Enter' || event.key === ' ') { event.preventDefault(); openItem(item); }
                           if (event.key === 'ContextMenu' || (event.shiftKey && event.key === 'F10')) {
                             event.preventDefault();
@@ -789,7 +839,7 @@ export const DesktopView: React.FC<DesktopViewProps> = ({
                           }
                         }}
                         onContextMenu={event => openMenu(event, item)}
-                        className={`desktop-item group relative flex flex-col items-center w-full max-w-[96px] h-[96px] px-1 pt-1 rounded-lg outline-none focus-visible:ring-2 focus-visible:ring-sky-500 cursor-pointer ${isEditing && item.type === 'bookmark' ? 'editing-wiggle' : ''} ${draggedId === id ? 'opacity-20' : ''} ${merging || selected ? 'bg-sky-400/20 ring-2 ring-sky-400' : ''}`}>
+                        className={`desktop-item group relative flex flex-col items-center w-full max-w-[96px] h-[96px] px-1 pt-1 rounded-lg outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-sky-500 cursor-pointer ${isEditing && item.type === 'bookmark' ? 'editing-wiggle' : ''} ${draggedId === id ? 'opacity-20' : ''} ${merging || selected ? 'bg-sky-400/20 ring-2 ring-sky-400' : ''}`}>
                         <div className="relative w-16 h-16 shrink-0 transition-transform group-hover:scale-105">
                           {renderIcon(item)}
                           {isEditing && item.type === 'bookmark' && <span className={`absolute -top-1 -left-1 w-5 h-5 rounded-full flex items-center justify-center border border-white/70 ${selected ? 'bg-sky-500 text-white' : 'bg-white/90'}`}>{selected && <Check size={12} />}</span>}
@@ -797,6 +847,7 @@ export const DesktopView: React.FC<DesktopViewProps> = ({
                         <DesktopIconLabel name={name} disabled={index !== pageIndex || !!menu || !!draggedId} />
                       </div>
                       <button title={text(`更多操作：${name}`, `More actions: ${name}`)} aria-label={text(`更多操作：${name}`, `More actions: ${name}`)}
+                        tabIndex={isEditing ? 0 : -1}
                         className="absolute top-0 right-0 sm:right-1 p-1 rounded-md bg-white/80 dark:bg-black/40 text-slate-600 dark:text-slate-200 hover:bg-white dark:hover:bg-black/60 sm:opacity-0 sm:focus:opacity-100 sm:group-hover/item:opacity-100 cursor-pointer"
                         onClick={event => openMenu(event, item)}><MoreHorizontal size={14} /></button>
                     </div>

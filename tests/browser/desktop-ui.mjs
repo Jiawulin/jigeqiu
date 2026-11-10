@@ -344,19 +344,25 @@ try {
     document.querySelector('nav[aria-label="桌面分页"] [aria-current="page"]')?.getAttribute('aria-label') === `第 ${screen} 屏`, screen);
   await page.getByRole('banner').getByRole('button', { name: '桌面', exact: true }).focus();
   await page.keyboard.press('ArrowRight');
-  await expectScreen(2);
-  await page.keyboard.press('ArrowLeft');
   await expectScreen(1);
+  assert.equal(await page.getByRole('banner').getByRole('button', { name: '桌面', exact: true })
+    .evaluate(element => document.activeElement === element), true, 'Header controls retain direction keys');
   await wheelTarget.focus();
+  await page.keyboard.press('ArrowRight');
+  await expectScreen(1);
+  assert.equal(await activeGrid(page).locator('[data-desktop-id]').first()
+    .evaluate(element => document.activeElement === element), true, 'First arrow selects the first icon');
+  await activeGrid(page).locator('[data-desktop-id]').last().focus();
   await page.keyboard.press('ArrowRight');
   await expectScreen(2);
   await page.keyboard.press('ArrowLeft');
   await expectScreen(1);
-  await page.getByRole('banner').getByRole('button', { name: '桌面', exact: true }).focus();
+  await activeGrid(page).locator('[data-desktop-id]').first().focus();
   await page.keyboard.down('ArrowRight');
-  await expectScreen(2);
+  const heldId = await page.evaluate(() => document.activeElement?.getAttribute('data-desktop-id'));
   await page.keyboard.down('ArrowRight');
-  await expectScreen(2);
+  assert.equal(await page.evaluate(() => document.activeElement?.getAttribute('data-desktop-id')), heldId,
+    'Holding an arrow does not continuously navigate');
   await page.keyboard.up('ArrowRight');
   await page.keyboard.press('ArrowLeft');
   await expectScreen(1);
@@ -406,7 +412,7 @@ try {
     assert.equal(result.screen, '第 1 屏', `${result.kind} must not turn the desktop page`);
   }
   const transition = await wheelTarget.locator(':scope > div').first().evaluate(track => track.style.transition);
-  assert.match(transition, /100ms/, 'Desktop paging uses the requested 100ms transition');
+  assert.match(transition, /transform 220ms/, 'Desktop paging retains the existing 220ms transition');
 
   wheelClock = await page.evaluate(() => performance.now() + 300);
   await wheelAt(60, 0);
@@ -432,9 +438,8 @@ try {
     await wheelAt(dx, index * 16);
     await expectScreen(renewedScreens[index]);
   }
-  await wheelTarget.focus();
   for (const screen of [3, 2, 1]) {
-    await page.keyboard.press('ArrowLeft');
+    await page.getByRole('button', { name: `第 ${screen} 屏`, exact: true }).click();
     await expectScreen(screen);
   }
   await page.waitForTimeout(600);
@@ -500,7 +505,7 @@ try {
   await checkKeyboard(page);
   await openBlankMenu(page);
   await page.getByRole('menu', { name: '桌面菜单', exact: true })
-    .getByRole('menuitem', { name: /添加.*网址|添加.*书签|快速添加/ }).click();
+    .getByRole('menuitem', { name: '添加收藏', exact: true }).click();
   const dialog = page.getByRole('dialog');
   await dialog.getByLabel('网址 URL', { exact: true }).waitFor();
   await dialog.getByRole('button', { name: '取消', exact: true }).click();
@@ -658,6 +663,9 @@ try {
     'Next page displays a different slice without duplicates');
   await checkLabelBounds(page);
   await page.getByTestId('desktop-viewport').focus();
+  await page.keyboard.press('ArrowLeft');
+  assert.equal(await activeGrid(page).locator('[data-desktop-id]').first()
+    .evaluate(element => document.activeElement === element), true, 'First arrow selects the current page first icon');
   await page.keyboard.press('ArrowLeft');
   await pagination.getByRole('button', { name: '第 1 屏', exact: true })
     .and(page.locator('[aria-current="page"]')).waitFor();
@@ -817,8 +825,8 @@ try {
     bookmarks: localStorage.getItem('jipage_bookmarks_v1'),
     folders: localStorage.getItem('jipage_folders_v1'),
   })), legacyRaw, 'Explicit pins and all desktop actions retain the original legacy keys byte-for-byte');
-  assert.equal(initialDockUnpinActions, 1,
-    'Empty legacy dock IDs fall back to the first four pinned bookmarks, including fixture0');
+  assert.equal(initialDockUnpinActions, 0,
+    'Explicitly empty Dock pins do not automatically pin desktop bookmarks');
 
   await capacity(page, { width: 1440, height: 1000 });
   await pagination.getByRole('button', { name: '第 1 屏', exact: true }).click();
