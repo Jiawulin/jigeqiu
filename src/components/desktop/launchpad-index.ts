@@ -1,5 +1,5 @@
-import { pinyin } from 'pinyin-pro';
 import type { Bookmark, Folder } from '../../types';
+import { buildBookmarkSearchIndex, matchesSearchFields, searchTokens } from '../../services/bookmark-search';
 
 export interface LaunchpadEntry {
   bookmark: Bookmark;
@@ -7,21 +7,6 @@ export interface LaunchpadEntry {
   initialLetter: string;
   sortKey: string;
   searchFields: string[];
-}
-
-function normalize(text: string): string {
-  return text.normalize('NFKC').toLowerCase().trim();
-}
-
-function indexedText(text: string): string[] {
-  const plain = normalize(text);
-  if (!/\p{Script=Han}/u.test(plain)) return [plain];
-  const syllables = pinyin(plain, { toneType: 'none', type: 'all', nonZh: 'consecutive' });
-  return [
-    plain,
-    syllables.map(part => part.result).join(''),
-    syllables.map(part => part.first).join(''),
-  ];
 }
 
 function validUrl(url: string): boolean {
@@ -56,28 +41,18 @@ export function buildLaunchpadIndex(bookmarks: Bookmark[], folders: Folder[]): L
     pathCache.set(folderId, path);
     return path;
   }
-  const textCache = new Map<string, string[]>();
-  function fields(text: string): string[] {
-    let cached = textCache.get(text);
-    if (!cached) {
-      cached = indexedText(text);
-      textCache.set(text, cached);
-    }
-    return cached;
-  }
+  const validBookmarks = bookmarks.filter(bookmark => validUrl(bookmark.url));
+  const searchIndex = buildBookmarkSearchIndex(validBookmarks, bookmark => archivePath(bookmark.folderId));
   const entries: LaunchpadEntry[] = [];
-  for (const bookmark of bookmarks) {
-    if (!validUrl(bookmark.url)) continue;
+  for (const bookmark of validBookmarks) {
     const path = archivePath(bookmark.folderId);
-    const titleFields = fields(bookmark.title);
+    const indexed = searchIndex.get(bookmark.id)!;
+    const titleFields = indexed.fields.title;
     const sortKey = titleFields[1] ?? titleFields[0];
     const first = sortKey.charAt(0);
     entries.push({
       bookmark, path, sortKey, initialLetter: /^[a-z]$/.test(first) ? first.toUpperCase() : '#',
-      searchFields: [...new Set([
-        ...titleFields,
-        ...[bookmark.domain, bookmark.url, bookmark.notes ?? '', ...(bookmark.keywords ?? []), path].flatMap(fields),
-      ])].filter(Boolean),
+      searchFields: indexed.searchFields,
     });
   }
   // Stable ties preserve separate records and never consult archive or desktop order.
@@ -89,7 +64,7 @@ export function buildLaunchpadIndex(bookmarks: Bookmark[], folders: Folder[]): L
 }
 
 export function searchLaunchpad(index: LaunchpadEntry[], query: string): LaunchpadEntry[] {
-  const tokens = normalize(query).split(/\s+/u).filter(Boolean);
+  const tokens = searchTokens(query);
   if (!tokens.length) return index.slice();
-  return index.filter(entry => tokens.every(token => entry.searchFields.some(field => field.includes(token))));
+  return index.filter(entry => matchesSearchFields(entry.searchFields, tokens));
 }

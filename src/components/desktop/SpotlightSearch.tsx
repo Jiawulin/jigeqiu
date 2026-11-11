@@ -19,6 +19,7 @@ import { isDesktopSearchKey, matchSpotlightCommands, type SystemCommandId } from
 import { appShortcut } from './app-shortcuts';
 import { normalizeSpotlightText, parseSpotlightUrlQuery, rankSpotlightBookmarks, type SpotlightUrlMatch } from './spotlight-ranking';
 import './spotlight-search.css';
+import { buildBookmarkSearchIndex } from '../../services/bookmark-search';
 import {
   Bookmark,
   Folder,
@@ -273,6 +274,9 @@ export const SpotlightSearch: React.FC<SpotlightSearchProps> = ({
     const path = folderId ? folderPaths.get(folderId) : undefined;
     return `全部收藏 / ${path?.map(folder => folder.name).join(' / ') || (folderId ? '原文件夹不存在' : '未整理')}`;
   };
+  const bookmarkSearchIndex = useMemo(() => buildBookmarkSearchIndex(bookmarks, bookmark =>
+    bookmark.folderId ? (folderPaths.get(bookmark.folderId) ?? []).map(folder => folder.name).join(' / ') : ''),
+  [bookmarks, folderPaths]);
 
   const defaultEngine = useMemo(() => {
     return (
@@ -458,7 +462,7 @@ export const SpotlightSearch: React.FC<SpotlightSearchProps> = ({
 
     // 1. Matched Bookmarks
     const recentIds = new Set(storage.getRecentUsed());
-    const rankedBookmarks = rankSpotlightBookmarks(bookmarks, query, bm => libraryPath(bm.folderId));
+    const rankedBookmarks = rankSpotlightBookmarks(bookmarks, query, bm => libraryPath(bm.folderId), bookmarkSearchIndex);
     rankedBookmarks.matches.forEach(({ bookmark: bm, urlMatch }) => {
       const path = libraryPath(bm.folderId);
       const isRecent = recentIds.has(bm.id);
@@ -586,7 +590,7 @@ export const SpotlightSearch: React.FC<SpotlightSearchProps> = ({
     }
 
     return items;
-  }, [query, bookmarks, folders, collections, plugins, platformSites, currentEngine, availableEngines, onSystemCommand, folderCounts, language]);
+  }, [query, bookmarks, folders, collections, plugins, platformSites, currentEngine, availableEngines, onSystemCommand, folderCounts, language, bookmarkSearchIndex]);
 
   // Reset selected index when results change
   useEffect(() => {

@@ -12,7 +12,7 @@ try {
   console.log(`Chromium ${browser.version()}; production dist; synthetic data; 1500ms chunk delay`);
   for (const scenario of baseline ? ['baseline'] : ['idle', 'no-idle-api', 'pending', 'immediate', 'preload-failure']) {
     const width = scenario === 'no-idle-api' ? 390 : scenario === 'immediate' ? 320 : 1440;
-    const context = await browser.newContext({ viewport: { width, height: 900 } });
+    const context = await browser.newContext({ locale: 'zh-CN', viewport: { width, height: 900 } });
     const errors = [];
     const requests = [];
     const page = await context.newPage();

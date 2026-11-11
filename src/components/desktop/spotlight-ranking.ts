@@ -1,12 +1,12 @@
 import type { Bookmark } from '../../types';
+import { buildBookmarkSearchIndex, normalizeSearchText, searchBookmarkIds, type BookmarkSearchIndex } from '../../services/bookmark-search';
 
 type SearchableBookmark = Pick<Bookmark, 'id' | 'title' | 'url' | 'domain'> &
   Partial<Pick<Bookmark, 'notes' | 'tags' | 'keywords'>>;
 
 export type SpotlightUrlMatch = 'exact' | 'same-host' | 'subdomain' | 'other';
 
-export const normalizeSpotlightText = (value: string) =>
-  value.normalize('NFKC').toLowerCase().replace(/\s+/gu, ' ').trim();
+export const normalizeSpotlightText = normalizeSearchText;
 
 function parseHttpUrl(value: string): URL | undefined {
   if (!/^https?:\/\/[^/]/iu.test(value) || /[\s\\]/u.test(value)) return;
@@ -34,6 +34,7 @@ export function rankSpotlightBookmarks<T extends SearchableBookmark>(
   bookmarks: readonly T[],
   query: string,
   pathFor: (bookmark: T) => string = () => '',
+  searchIndex?: BookmarkSearchIndex,
 ) {
   const q = normalizeSpotlightText(query);
   if (!q) return { matches: [], automaticId: undefined };
@@ -42,6 +43,7 @@ export function rankSpotlightBookmarks<T extends SearchableBookmark>(
   const queryHost = queryUrl?.hostname.replace(/^www\./u, '');
   const compactQuery = q.replace(/\s+/gu, '');
   const pathQuery = query.includes('/');
+  const matchingIds = searchBookmarkIds(searchIndex ?? buildBookmarkSearchIndex(bookmarks, pathFor), query);
   const matches = bookmarks.flatMap(bookmark => {
     const title = normalizeSpotlightText(bookmark.title);
     const compactTitle = title.replace(/\s+/gu, '');
@@ -54,8 +56,9 @@ export function rankSpotlightBookmarks<T extends SearchableBookmark>(
     const titleMatch = compactTitle.includes(compactQuery);
     const fields = [title, hostname, bookmark.domain, bookmark.url, bookmark.notes ?? '',
       ...(bookmark.tags ?? []), ...(bookmark.keywords ?? []), pathFor(bookmark)];
-    if (urlMatch === 'other' && !titleMatch && !fields.some(field => normalizeSpotlightText(field).includes(q))) return [];
-    let score = titleMatch ? 40 : hostname.includes(q) ? 30 : 10;
+    const originalMatch = titleMatch || fields.some(field => normalizeSpotlightText(field).includes(q));
+    if (urlMatch === 'other' && !originalMatch && !matchingIds.has(bookmark.id)) return [];
+    let score = titleMatch ? 40 : hostname.includes(q) ? 30 : originalMatch ? 10 : 5;
     if (exactUrl) score = 120;
     else if (queryUrl && urlMatch === 'same-host') score = 80;
     else if (queryUrl && urlMatch === 'subdomain') score = 60;

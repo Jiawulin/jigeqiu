@@ -277,6 +277,9 @@ test('folder edit, batch move, pagination and empty states use the selected loca
       && node.props.value === '' && node.props.placeholder);
     assert.ok(search);
     search.props.onChange({ target: { value: 'missing' } });
+    assert.match(html(view), en ? /No matching bookmarks/ : /没有匹配的收藏/);
+    search.props.onChange({ target: { value: '' } });
+    view.props.bookmarks = [];
     assert.match(html(view), en ? /No bookmarks in this folder/ : /当前文件夹暂无书签/);
   }
 });

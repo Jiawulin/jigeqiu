@@ -54,6 +54,7 @@ import { preferenceSaveError } from '../../services/preference-save-error';
 import { commitAndRefresh } from '../../services/library-mutation';
 import { createTranslator } from '../../i18n';
 import type { OnboardingTaskContext } from '../onboarding/types';
+import { buildBookmarkSearchIndex, searchBookmarkIds } from '../../services/bookmark-search';
 
 interface UserCenterViewProps {
   onboarding?: OnboardingTaskContext;
@@ -116,6 +117,10 @@ export const UserCenterView: React.FC<UserCenterViewProps> = ({
   const [selectedFolderId, setSelectedFolderId] = useState<string>('all');
   const folderPaths = useMemo(() => indexFolderPaths(folders), [folders]);
   const [bookmarkSearch, setBookmarkSearch] = useState('');
+  const bookmarkSearchIndex = useMemo(() => buildBookmarkSearchIndex(bookmarks, bookmark =>
+    bookmark.folderId ? (folderPaths.get(bookmark.folderId) ?? []).map(folder => folder.name).join(' / ') : ''),
+  [bookmarks, folderPaths]);
+  const matchingBookmarkIds = useMemo(() => searchBookmarkIds(bookmarkSearchIndex, bookmarkSearch), [bookmarkSearchIndex, bookmarkSearch]);
   const [selectedBmIds, setSelectedBmIds] = useState<string[]>([]);
 
   // Modals for Bookmark Manager
@@ -199,28 +204,20 @@ export const UserCenterView: React.FC<UserCenterViewProps> = ({
     });
   };
 
-  // Filter bookmarks according to selected folder & search keyword
+  // Search the whole library; folder selection only limits browsing without a query.
   const filteredBookmarks = useMemo(() => {
     let list = bookmarks;
 
-    if (selectedFolderId === 'unorganized') {
+    if (!bookmarkSearch.trim() && selectedFolderId === 'unorganized') {
       list = list.filter(bm => !bm.folderId);
-    } else if (selectedFolderId !== 'all') {
+    } else if (!bookmarkSearch.trim() && selectedFolderId !== 'all') {
       list = list.filter(bm => bm.folderId === selectedFolderId);
     }
 
-    if (bookmarkSearch.trim()) {
-      const q = bookmarkSearch.toLowerCase();
-      list = list.filter(bm => {
-        const matchTitle = bm.title.toLowerCase().includes(q);
-        const matchDomain = bm.domain.toLowerCase().includes(q);
-        const matchNotes = (bm.notes || '').toLowerCase().includes(q);
-        return matchTitle || matchDomain || matchNotes || bm.keywords?.some(keyword => keyword.toLowerCase().includes(q));
-      });
-    }
+    list = list.filter(bm => matchingBookmarkIds.has(bm.id));
 
     return list;
-  }, [bookmarks, selectedFolderId, bookmarkSearch]);
+  }, [bookmarks, selectedFolderId, matchingBookmarkIds, bookmarkSearch]);
 
   // Reset pagination when filter or folder changes
   React.useEffect(() => {
@@ -895,7 +892,7 @@ export const UserCenterView: React.FC<UserCenterViewProps> = ({
                     aria-label={t('managerBookmarkSearch')}
                     value={bookmarkSearch}
                     onChange={e => setBookmarkSearch(e.target.value)}
-                    className="w-full pl-8 pr-3 py-1.5 rounded-xl bg-black/5 dark:bg-white/10 border border-slate-200/50 dark:border-white/10 focus:outline-none text-slate-800 dark:text-slate-100"
+                    className="w-full pl-8 pr-8 py-1.5 rounded-xl bg-black/5 dark:bg-white/10 border border-slate-200/50 dark:border-white/10 focus:outline-none text-slate-800 dark:text-slate-100"
                   />
                   {bookmarkSearch && (
                     <button
@@ -924,6 +921,12 @@ export const UserCenterView: React.FC<UserCenterViewProps> = ({
                   </button>
                 </div>
               </div>
+
+              <p className="text-slate-500 dark:text-slate-400 break-words">
+                {bookmarkSearch.trim() || selectedFolderId === 'all' ? t('managerSearchScopeAll')
+                  : selectedFolderId === 'unorganized' ? t('managerSearchScopeUnorganized')
+                    : t('managerSearchScopeFolder', { name: folders.find(folder => folder.id === selectedFolderId)?.name ?? '' })}
+              </p>
 
               {/* Row 2: Breadcrumbs Trail */}
               <div className="flex items-center gap-1.5 text-xs text-slate-500 flex-wrap pt-1 border-t border-slate-200/50 dark:border-white/5">
@@ -1055,8 +1058,8 @@ export const UserCenterView: React.FC<UserCenterViewProps> = ({
               {paginatedBookmarks.length === 0 ? (
                 <div className="py-16 text-center text-slate-400 text-xs flex flex-col items-center justify-center gap-2">
                   <BookmarkCheck size={32} className="opacity-30 text-sky-500" />
-                  <p className="font-semibold text-slate-600 dark:text-slate-300">{t('managerEmptyFolderTitle')}</p>
-                  <p className="text-[11px] opacity-70">{t('managerEmptyFolderHint')}</p>
+                  <p className="font-semibold text-slate-600 dark:text-slate-300">{t(bookmarkSearch.trim() ? 'managerSearchNoResults' : 'managerEmptyFolderTitle')}</p>
+                  {!bookmarkSearch.trim() && <p className="text-[11px] opacity-70">{t('managerEmptyFolderHint')}</p>}
                 </div>
               ) : (
                 <div className="divide-y divide-slate-100 dark:divide-white/5">

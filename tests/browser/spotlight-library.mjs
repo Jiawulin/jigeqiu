@@ -9,7 +9,7 @@ let browser;
 try {
   await server.listen();
   browser = await chromium.launch({ headless: true });
-  const context = await browser.newContext({ viewport: { width: 1440, height: 1000 } });
+  const context = await browser.newContext({ locale: 'zh-CN', viewport: { width: 1440, height: 1000 } });
   await context.route('https://**/*', route => route.fulfill({ body: 'Destination' }));
   const page = await context.newPage();
   page.setDefaultTimeout(8000);

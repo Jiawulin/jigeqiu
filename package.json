@@ -50,6 +50,7 @@
     "test:browser:spotlight-ui": "node tests/browser/spotlight-ui.mjs",
     "test:browser:spotlight-commands": "node tests/browser/spotlight-commands.mjs",
     "test:browser:spotlight-library": "node tests/browser/spotlight-library.mjs",
+    "test:browser:bookmark-search": "node tests/browser/bookmark-search.mjs",
     "test:browser:navigation": "node tests/browser/navigation.mjs",
     "test:browser:management-scroll": "node tests/browser/management-scroll.mjs",
     "test:browser:hash-routing": "node tests/browser/hash-routing.mjs",

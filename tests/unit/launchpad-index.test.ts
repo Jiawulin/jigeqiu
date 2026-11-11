@@ -138,6 +138,15 @@ test('query uses built index fields rather than converting bookmark text again',
   assert.deepEqual(ids(searchLaunchpad(index, 'zw')), ['b']);
 });
 
+test('fuel title supports normalized pinyin and mixed queries without typo expansion', () => {
+  const index = buildLaunchpadIndex([bookmark('fuel', '小熊油耗', { keywords: ['汽车'] })], []);
+  for (const query of [' 小熊油耗 ', 'xxyh', 'XXYH', 'ＸＸＹＨ', ' xxyh ', 'xiaoxiongyouhao', 'xxy', 'xiaoxiong', 'xx 油耗', 'xxyh qiche']) {
+    assert.deepEqual(ids(searchLaunchpad(index, query)), ['fuel'], query);
+  }
+  assert.deepEqual(searchLaunchpad(index, 'xxyg'), []);
+  assert.deepEqual(searchLaunchpad(index, 'xxyh nonexistent'), []);
+});
+
 test('supports a 64-level archive without truncating or modifying names', () => {
   const folders = Array.from({ length: 64 }, (_, index) => folder(`f${index}`, `Level${index}`, index ? `f${index - 1}` : undefined));
   const index = buildLaunchpadIndex([bookmark('deep', 'Deep', { folderId: 'f63' })], folders);

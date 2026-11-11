@@ -5,6 +5,20 @@ import { parseSpotlightUrlQuery, rankSpotlightBookmarks } from '../../src/compon
 const bookmark = (id: string, title: string, url = `https://${id}.test/`, keywords: string[] = []) =>
   ({ id, title, url, domain: new URL(url).hostname, keywords });
 
+test('pinyin, initials and cross-field tokens retrieve bookmarks without automatic selection', () => {
+  const item = { ...bookmark('fuel', '小熊油耗', undefined, ['汽车']), notes: '私人备注' };
+  for (const query of ['xxyh', 'XXYH', 'ＸＸＹＨ', ' xxyh ', 'xiaoxiongyouhao', 'xxy', 'xiaoxiong', 'xx 油耗', 'xxyh qiche', 'srbz gzzl']) {
+    const result = rankSpotlightBookmarks([item], query, () => '工作资料');
+    assert.deepEqual(result.matches.map(match => match.bookmark.id), ['fuel'], query);
+    assert.equal(result.automaticId, undefined, query);
+  }
+  assert.equal(rankSpotlightBookmarks([item], 'xxyg').matches.length, 0);
+  assert.equal(rankSpotlightBookmarks([item], 'xxyh nonexistent').matches.length, 0);
+  const ranked = rankSpotlightBookmarks([item, bookmark('literal', 'xxyh')], 'xxyh');
+  assert.deepEqual(ranked.matches.map(match => match.bookmark.id), ['literal', 'fuel']);
+  assert.equal(ranked.automaticId, 'literal');
+});
+
 test('normalized exact title outranks substrings independently of library order', () => {
   const result = rankSpotlightBookmarks([
     bookmark('docs', 'GitHub documentation'), bookmark('github', 'GitHub'),
