@@ -162,9 +162,14 @@ test('a new release stays draft until both ZIPs and the checksum are uploaded an
     'HTTPS',
     'Source code',
     'JSON',
-    '不要卸载',
+    '不要先卸载',
     'Web',
     'English',
+    '## 中文',
+    '个人网址收藏工作台',
+    'personal bookmark workbench',
+    '| 文件 | 适用场景 | 使用方式 |',
+    '| File | Intended Use | Getting Started |',
   ]) {
     assert.ok(body.includes(text), `Release instructions missing: ${text}`);
   }
@@ -172,6 +177,11 @@ test('a new release stays draft until both ZIPs and the checksum are uploaded an
     !body.includes('vX.Y.Z'),
     'Release filenames must use the actual tag',
   );
+  assert.ok(
+    !body.includes('X.Y.Z'),
+    'No placeholder versions in release instructions',
+  );
+  assert.ok(body.indexOf('## 中文') < body.indexOf('## English'));
   const upload = gh.calls.findIndex((args) => args.includes('--input'));
   const publish = gh.calls.findIndex((args) => args.includes('PATCH'));
   assert.ok(upload > 0 && publish > upload);
