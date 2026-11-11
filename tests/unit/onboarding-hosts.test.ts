@@ -43,8 +43,18 @@ function harness(file: string, name: string, props: Record<string, any>, overrid
   };
   const source = readFileSync(path, 'utf8') + (name === 'BookmarkDialogSession' ? '\nexport { BookmarkDialogSession };' : '');
   const module = { exports: {} as Record<string, (props: any) => React.ReactNode> };
+  const loadGestureHook = () => {
+    const hookPath = new URL('../../src/components/desktop/use-launchpad-gestures.ts', import.meta.url);
+    const hookRequire = createRequire(hookPath);
+    const hookModule = { exports: {} };
+    new Function('require', 'module', 'exports', transformSync(readFileSync(hookPath, 'utf8'), {
+      loader: 'ts', format: 'cjs',
+    }).code)((id: string) => id === 'react' ? hooks : hookRequire(id), hookModule, hookModule.exports);
+    return hookModule.exports;
+  };
   new Function('require', 'module', 'exports', transformSync(source, { loader: 'tsx', format: 'cjs', jsx: 'automatic' }).code)(
-    (id: string) => id === 'react' ? hooks : id === '../onboarding/TaskHint' ? { TaskHint }
+    (id: string) => id === 'react' ? hooks : id === './use-launchpad-gestures' ? loadGestureHook()
+      : id === '../onboarding/TaskHint' ? { TaskHint }
       : id.endsWith('.css') ? {} : overrides[id]
         ?? (/\/(?:DesktopConfirmPopover|DesktopIconLabel|FaviconImage|LaunchpadMark|MenuActionLabel)$/.test(id)
           ? new Proxy({}, { get: () => () => null }) : require(id)), module, module.exports,

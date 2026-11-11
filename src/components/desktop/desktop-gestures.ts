@@ -5,10 +5,14 @@ export function rubberBand(distance: number, width: number): number {
 
 type DesktopGestureAction = 'search' | 'launchpad' | 'previous' | 'next';
 
+export const DESKTOP_MOUSE_VERTICAL_DISTANCE = 36;
+export const DESKTOP_MOUSE_FLICK_DISTANCE = 16;
+export const DESKTOP_MOUSE_FLICK_SPEED = 0.25;
+
 export function createDesktopGesture(start: {
   x: number; y: number; now: number; width: number; height: number; touch: boolean;
 }) {
-  const verticalThreshold = start.touch ? Math.min(104, Math.max(64, start.height * 0.105)) : 36;
+  const verticalThreshold = start.touch ? Math.min(104, Math.max(64, start.height * 0.105)) : DESKTOP_MOUSE_VERTICAL_DISTANCE;
   const horizontalThreshold = start.touch ? Math.max(55, Math.min(120, start.width * 0.18)) : 28;
   const samples = [{ x: start.x, y: start.y, at: start.now }];
   let peak = 0;
@@ -70,9 +74,9 @@ export function createDesktopGesture(start: {
       // Mouse release intent uses recent horizontal motion, not the whole drag or post-release events.
       const mouseFirst = samples.find(sample => sample.at >= at - 80) ?? last;
       const mouseVelocity = (last.x - mouseFirst.x) / Math.max(1, at - mouseFirst.at);
-      const mouseFlick = !start.touch && horizontal && magnitude >= 16
+      const mouseFlick = !start.touch && horizontal && magnitude >= DESKTOP_MOUSE_FLICK_DISTANCE
         && at - horizontalMotionAt <= 60 && peak - magnitude <= 3
-        && Math.sign(mouseVelocity) === Math.sign(distance) && Math.abs(mouseVelocity) >= 0.25;
+        && Math.sign(mouseVelocity) === Math.sign(distance) && Math.abs(mouseVelocity) >= DESKTOP_MOUSE_FLICK_SPEED;
       if (!flick && !mouseFlick && magnitude < (horizontal ? horizontalThreshold : verticalThreshold)) return null;
       return horizontal ? distance < 0 ? 'next' : 'previous' : distance < 0 ? 'launchpad' : 'search';
     },

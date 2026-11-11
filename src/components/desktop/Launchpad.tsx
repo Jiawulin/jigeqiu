@@ -16,6 +16,7 @@ import { createTranslator } from '../../i18n';
 import { TaskHint } from '../onboarding/TaskHint';
 import type { OnboardingTaskContext } from '../onboarding/types';
 import './launchpad.css';
+import { useLaunchpadGestures } from './use-launchpad-gestures';
 
 export interface LaunchpadProps {
   isOpen: boolean;
@@ -59,8 +60,10 @@ export function Launchpad({ isOpen, browseOnOpen = false, onClose, bookmarks, fo
   const closeButton = useRef<HTMLButtonElement>(null);
   const scroll = useRef<HTMLDivElement>(null);
   const menuElement = useRef<HTMLDivElement>(null);
+  const menuScrollTop = useRef(0);
   const buttons = useRef(new Map<string, HTMLButtonElement>());
   const composing = useRef(false);
+  const pointerSelection = useRef(false);
   const index = useMemo(() => buildLaunchpadIndex(bookmarks, folders), [bookmarks, folders]);
   const results = useMemo(() => searchLaunchpad(index, query), [index, query]);
   const letterTargets = useMemo(() => {
@@ -76,6 +79,22 @@ export function Launchpad({ isOpen, browseOnOpen = false, onClose, bookmarks, fo
   const firstId = results[0]?.bookmark.id ?? null;
   const hasQuery = Boolean(query.trim());
   const menuBookmarkId = menu?.entry.bookmark.id ?? null;
+  const letterPreview = useLaunchpadGestures(root, scroll, isOpen && !confirmation, query, (letter, finished) => {
+    const entry = letterTargets.get(letter);
+    const element = entry && buttons.current.get(entry.bookmark.id);
+    const container = scroll.current;
+    if (!element || !container) return false;
+    pointerSelection.current = true;
+    setSelectedId(entry.bookmark.id);
+    setActiveLetter(letter);
+    if (finished) {
+      element.focus({ preventScroll: true });
+      return true;
+    }
+    const offset = element.getBoundingClientRect().top - container.getBoundingClientRect().top;
+    container.scrollTop = Math.max(0, container.scrollTop + offset - 20);
+    return true;
+  }, !!menu);
   const reportedPin = useRef<{
     query: string; firstId: string | null; hasQuery: boolean; menuBookmarkId: string | null;
   } | null>(null);
@@ -115,10 +134,11 @@ export function Launchpad({ isOpen, browseOnOpen = false, onClose, bookmarks, fo
     }
   }, [isOpen, teachingPin, onboarding, query, firstId, hasQuery, menuBookmarkId]);
   useEffect(() => {
-    if (isOpen && effectiveSelection) buttons.current.get(effectiveSelection)?.scrollIntoView({ block: 'nearest' });
+    if (isOpen && !menu && effectiveSelection && !pointerSelection.current) buttons.current.get(effectiveSelection)?.scrollIntoView({ block: 'nearest' });
   }, [isOpen, effectiveSelection]);
 
   const focusEntry = (id: string) => {
+    pointerSelection.current = false;
     setSelectedId(id);
     buttons.current.get(id)?.focus({ preventScroll: true });
     buttons.current.get(id)?.scrollIntoView({ block: 'nearest' });
@@ -130,6 +150,7 @@ export function Launchpad({ isOpen, browseOnOpen = false, onClose, bookmarks, fo
   };
   useLayoutEffect(() => {
     if (!menu || !menuElement.current) return;
+    menuScrollTop.current = scroll.current?.scrollTop ?? 0;
     const element = menuElement.current;
     setMenuPosition(positionDesktopMenu({
       x: menu.x, y: menu.y, width: element.offsetWidth, height: element.scrollHeight,
@@ -163,6 +184,7 @@ export function Launchpad({ isOpen, browseOnOpen = false, onClose, bookmarks, fo
     setMenu({ entry, x: event.clientX, y: event.clientY });
   };
   const changeQuery = (value: string) => {
+    pointerSelection.current = false;
     setQuery(value);
     setSelectedId(null);
     setMenu(null);
@@ -299,7 +321,7 @@ export function Launchpad({ isOpen, browseOnOpen = false, onClose, bookmarks, fo
 
   if (!isOpen) return null;
   return <div ref={root} tabIndex={-1} data-panel="launchpad" role="dialog" aria-modal="true" aria-label={text('启动台', 'Launchpad')}
-    onKeyDown={handleKeys} style={{ letterSpacing: 0 }}
+    onKeyDown={event => { pointerSelection.current = false; handleKeys(event); }} style={{ letterSpacing: 0 }}
     onClick={event => { if (event.target === event.currentTarget) onClose(); }}
     className="launchpad-shell fixed inset-0 z-[1200] flex flex-col overflow-hidden pb-4 pt-5 outline-none">
     <header className="launchpad-header mx-auto mb-3 grid w-full max-w-6xl shrink-0 grid-cols-[1fr_auto] items-center gap-3 px-4 pr-10 sm:grid-cols-[auto_1fr_auto] sm:px-12 sm:pr-14">
@@ -327,15 +349,9 @@ export function Launchpad({ isOpen, browseOnOpen = false, onClose, bookmarks, fo
     {error && <p role="alert" className="mx-auto mb-2 w-full max-w-6xl px-5 text-xs text-rose-700 dark:text-rose-300">{error}</p>}
     <div ref={scroll} data-testid="launchpad-scroll"
       onScroll={() => {
-        if (menu) dismissMenu(true);
+        if (menu && scroll.current && Math.abs(scroll.current.scrollTop - menuScrollTop.current) > 0.5) dismissMenu(true);
         if (query.trim() || !scroll.current) return;
         const top = scroll.current.getBoundingClientRect().top;
-        const selectedEntry = results.find(entry => entry.bookmark.id === effectiveSelection);
-        const selectedRect = selectedEntry && buttons.current.get(selectedEntry.bookmark.id)?.getBoundingClientRect();
-        if (selectedRect && selectedRect.top >= top && selectedRect.bottom <= scroll.current.getBoundingClientRect().bottom) {
-          setActiveLetter(selectedEntry.initialLetter);
-          return;
-        }
         const current = results.find(entry => {
           const rect = buttons.current.get(entry.bookmark.id)?.getBoundingClientRect();
           return rect && rect.bottom > top + 20;
@@ -356,16 +372,18 @@ export function Launchpad({ isOpen, browseOnOpen = false, onClose, bookmarks, fo
         </section>}
       </div>
     </div>
-    {!query.trim() && letterTargets.size > 0 && <nav aria-label={text('字母索引', 'Alphabet index')}
+    {!query.trim() && letterTargets.size > 0 && <nav data-launchpad-alphabet aria-label={text('字母索引', 'Alphabet index')}
       className="absolute bottom-5 right-1 top-32 flex w-7 flex-col items-center justify-center gap-0.5 sm:right-3 sm:top-24">
       {alphabet.map(letter => {
         const populated = letterTargets.has(letter);
-        return <button key={letter} type="button" data-launchpad-letter disabled={!populated}
+        return <button key={letter} type="button" data-launchpad-letter={letter} disabled={!populated}
           aria-label={text(`跳转到 ${letter}`, `Jump to ${letter}`)} aria-current={activeLetter === letter ? 'location' : undefined}
           onClick={() => jumpToLetter(letter)}
           className="launchpad-letter flex min-h-0 w-6 max-h-5 flex-1 items-center justify-center rounded text-[10px] font-medium outline-none">{letter}</button>;
       })}
     </nav>}
+    {letterPreview && <div data-testid="launchpad-letter-preview" aria-hidden="true"
+      className="launchpad-letter-preview" style={{ top: letterPreview.top }}>{letterPreview.letter}</div>}
     {menu && <div ref={menuElement} role="menu" aria-label={text('收藏操作', 'Bookmark actions')} style={menuPosition}
       onClick={event => event.stopPropagation()} onContextMenu={event => event.preventDefault()}
       className="fixed z-[1400] w-56 max-w-[calc(100vw-24px)] rounded-lg p-1 liquid-glass bg-white/95 dark:bg-[#181d28]/95 backdrop-blur-2xl border border-white/60 dark:border-white/15 shadow-xl overflow-y-auto">

@@ -63,6 +63,49 @@
   transition: background-color 120ms ease;
 }
 
+.launchpad-scrollbar {
+  touch-action: pan-y pinch-zoom;
+  user-select: none;
+  -webkit-user-select: none;
+}
+
+.launchpad-scrollbar img {
+  -webkit-user-drag: none;
+}
+
+.launchpad-scrollbar[data-dragging="true"],
+.launchpad-scrollbar[data-dragging="true"] * {
+  cursor: grabbing;
+}
+
+[data-launchpad-alphabet] {
+  touch-action: none;
+  user-select: none;
+  -webkit-user-select: none;
+}
+
+[data-launchpad-alphabet] :disabled {
+  pointer-events: none;
+}
+
+.launchpad-letter-preview {
+  position: fixed;
+  right: 44px;
+  z-index: 1300;
+  display: grid;
+  place-items: center;
+  width: 64px;
+  height: 64px;
+  transform: translateY(-50%);
+  border: 1px solid var(--desktop-border);
+  border-radius: 8px;
+  background: var(--desktop-panel);
+  color: var(--desktop-text);
+  font-size: 32px;
+  font-weight: 600;
+  pointer-events: none;
+}
+
 .launchpad-icon:hover,
 .launchpad-close:hover {
   background: var(--desktop-hover);
