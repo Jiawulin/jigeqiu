@@ -46,6 +46,14 @@ test('package CLI completes a fresh build with shared styles and correct icon di
     version,
   );
   const manifest = JSON.parse(Buffer.from(entries['manifest.json']).toString());
+  assert.equal(manifest.default_locale, 'zh_CN');
+  assert.equal(manifest.name, '__MSG_extensionName__');
+  assert.equal(manifest.description, '__MSG_extensionDescription__');
+  for (const locale of ['zh_CN', 'en']) {
+    const messages = JSON.parse(Buffer.from(entries[`_locales/${locale}/messages.json`]).toString());
+    assert.ok(messages.extensionName.message.trim());
+    assert.ok(messages.extensionDescription.message.trim());
+  }
   const { createPublicKey } = await import('node:crypto');
   assert.equal(
     createPublicKey({

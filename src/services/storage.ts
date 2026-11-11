@@ -33,6 +33,8 @@ import { exportBookmarkHtml } from './import-export/bookmark-html-export';
 import { SEARCH_ENGINE_PRESETS } from '../data/search-engine-presets';
 import { searchEnginePresetStatus } from './search-engine-presets';
 import { createTranslator } from '../i18n';
+import { selectLocale } from '../i18n/locale';
+import { USER_SETTINGS_KEY } from './user-locale';
 import { applicationStorage, mutateStorage } from './application-storage';
 
 const STORAGE_KEYS = {
@@ -45,7 +47,7 @@ const STORAGE_KEYS = {
   SEARCH_ENGINES: 'jipage_search_engines_v1',
   PLUGINS: 'jipage_plugins_v1',
   SUBMISSIONS: 'jipage_submissions_v1',
-  SETTINGS: 'jipage_settings_v1',
+  SETTINGS: USER_SETTINGS_KEY,
   RECENT_SEARCHES: 'jipage_recent_searches_v1',
   RECENT_USED: 'jipage_recent_used_v1',
 };
@@ -1004,8 +1006,10 @@ export class StorageManager {
 
   // Settings
   getUserSettings(): UserSettings {
-    const saved = this.safeGet<UserSettings>(STORAGE_KEYS.SETTINGS, DEFAULT_USER_SETTINGS);
-    const settings: UserSettings = { ...saved, customWallpaperFit: 'cover' };
+    const saved = this.safeGet<Partial<UserSettings> | null>(STORAGE_KEYS.SETTINGS, null);
+    const settings: UserSettings = {
+      ...DEFAULT_USER_SETTINGS, ...saved, language: selectLocale(saved?.language), customWallpaperFit: 'cover',
+    };
     const data = this.envelope(applicationStorage().getItem(STORAGE_KEYS.LIBRARY));
     const effective = data?.dockBookmarkIds ? { ...settings, dockBookmarkIds: data.dockBookmarkIds as string[] } : settings;
     this.dockBase ??= JSON.stringify(effective.dockBookmarkIds ?? []);

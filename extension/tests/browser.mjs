@@ -18,6 +18,7 @@ async function launch(directory) {
   const browser = await chromium.launchPersistentContext(profile, {
     channel: 'chromium',
     headless: true,
+    locale: 'zh-CN',
     executablePath: process.env.PLAYWRIGHT_EXECUTABLE_PATH || undefined,
     viewport: { width: 1440, height: 1000 },
     args: [

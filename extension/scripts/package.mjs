@@ -50,6 +50,18 @@ export async function validateExtension(root, version) {
     'Extension version must match package.json',
   );
   assert.ok(manifest.name, 'Missing extension name');
+  if (manifest.default_locale) {
+    const locales = await readdir(path.join(root, '_locales'));
+    assert.ok(locales.includes(manifest.default_locale), 'Missing default locale');
+    for (const locale of locales) {
+      const file = await requireFile(root, `_locales/${locale}/messages.json`);
+      const messages = JSON.parse(await readFile(file.absolute, 'utf8'));
+      for (const value of [manifest.name, manifest.description]) {
+        const key = /^__MSG_(\w+)__$/.exec(value)?.[1];
+        if (key) assert.ok(messages[key]?.message?.trim(), `Missing message: ${locale}/${key}`);
+      }
+    }
+  }
   const entry = await requireFile(root, manifest.chrome_url_overrides?.newtab);
   assert.ok(
     Object.keys(manifest.icons ?? {}).length,

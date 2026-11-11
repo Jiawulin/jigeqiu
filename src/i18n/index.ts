@@ -24,6 +24,7 @@ import { wallpaperMessages } from './wallpaper';
 import { searchPresetMessages } from './search-presets';
 import { tipMessages } from './tips';
 import { onboardingMessages } from './onboarding';
+import { extensionMessages } from './extension';
 
 const catalog = {
   ...bookmarkMessages,
@@ -42,6 +43,7 @@ const catalog = {
   ...searchPresetMessages,
   ...tipMessages,
   ...onboardingMessages,
+  ...extensionMessages,
 } as const satisfies MessageTable;
 
 export const messages = {

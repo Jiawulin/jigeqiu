@@ -3,16 +3,20 @@ import { useState } from 'react';
 import { PRIVACY_VERSION } from './content';
 import { PrivacyContent, PrivacyDialog } from './PrivacyDialog';
 import './privacy.css';
+import { createTranslator } from '../../src/i18n';
 
 export function PrivacyPage({
   initial = false,
   onContinue,
+  language,
 }: {
   initial?: boolean;
   onContinue?: () => void | Promise<void>;
+  language?: string;
 }) {
+  const t = createTranslator(language);
   const [declined, setDeclined] = useState(false);
-  const [error, setError] = useState('');
+  const [error, setError] = useState(false);
   const [details, setDetails] = useState(false);
   const [busy, setBusy] = useState(false);
   return (
@@ -20,47 +24,46 @@ export function PrivacyPage({
       <header>
         <img src="brand/logo-a2-equator.png" width="48" height="48" alt="" />
         <div>
-          <h1>记个球</h1>
-          <p>浏览器新标签页扩展</p>
+          <h1>{t('extensionBrand')}</h1>
+          <p>{t('extensionSubtitle')}</p>
         </div>
       </header>
-      <h2>{initial ? '使用前的隐私告知' : '隐私说明'}</h2>
-      <p className="privacy-version">告知版本：{PRIVACY_VERSION}</p>
+      <h2>{t(initial ? 'extensionPrivacyInitial' : 'extensionPrivacy')}</h2>
+      <p className="privacy-version">{t('extensionPrivacyVersion', { version: PRIVACY_VERSION })}</p>
       {initial ? (
         <>
           <ul className="privacy-summary">
-            <li>收藏、设置及壁纸保存在当前浏览器，不提供云同步。</li>
+            <li>{t('extensionSummaryLocal')}</li>
             <li>
-              扩展替换浏览器新标签页；未授权网站使用普通图片加载，不主动申请网站访问权限。
+              {t('extensionSummaryPermissions')}
             </li>
             <li>
-              远程图片、外部搜索、收藏链接及嵌入网页可能连接第三方网站，对方可能收到
-              IP、搜索词或浏览器请求信息。
+              {t('extensionSummaryRemote')}
             </li>
             <li>
-              图标可能自动连接图片站点；提交搜索时会向所选服务发送搜索词。已有站点权限下的标题补全可能请求包含路径和查询参数的完整网址。
+              {t('extensionSummaryIcons')}
             </li>
           </ul>
           <p>
-            这是应用内隐私告知，不会代替浏览器的权限授权。未确认前不会进入工作台。
+            {t('extensionPrivacyConsent')}
           </p>
           <button type="button" onClick={() => setDetails(true)}>
-            完整隐私说明
+            {t('extensionPrivacyFull')}
           </button>
           {declined ? (
             <div className="privacy-declined">
               <p role="status">
-                尚未进入工作台。你可以关闭本页，并在浏览器扩展管理页停用或移除记个球。
+                {t('extensionPrivacyDeclined')}
               </p>
               <button type="button" onClick={() => setDeclined(false)}>
                 <ArrowLeft size={16} />
-                返回隐私告知
+                {t('extensionPrivacyBack')}
               </button>
             </div>
           ) : (
             <div className="privacy-actions">
               <button type="button" onClick={() => setDeclined(true)}>
-                暂不使用
+                {t('extensionPrivacyDecline')}
               </button>
               <button
                 type="button"
@@ -69,37 +72,35 @@ export function PrivacyPage({
                 onClick={async () => {
                   if (busy) return;
                   setBusy(true);
-                  setError('');
+                  setError(false);
                   try {
                     await onContinue?.();
                   } catch {
-                    setError(
-                      '无法保存本地告知记录，未进入工作台。请检查浏览器存储权限后重试。',
-                    );
+                    setError(true);
                   } finally { setBusy(false); }
                 }}
               >
                 <Check size={16} />
-                知晓并继续
+                {t('extensionPrivacyContinue')}
               </button>
             </div>
           )}
-          {error && <p role="alert">{error}</p>}
+          {error && <p role="alert">{t('extensionPrivacySaveError')}</p>}
         </>
       ) : (
         <>
-          <PrivacyContent />
+          <PrivacyContent language={language} />
           <a className="privacy-return" href={`./index.html${location.hash}`}>
             <ArrowLeft size={16} />
-            返回
+            {t('extensionReturn')}
           </a>
         </>
       )}
       <footer>
         <ShieldCheck size={16} />
-        隐私说明随扩展提供，可离线查看。
+        {t('extensionPrivacyOffline')}
       </footer>
-      {details && <PrivacyDialog onClose={() => setDetails(false)} />}
+      {details && <PrivacyDialog language={language} onClose={() => setDetails(false)} />}
     </main>
   );
 }

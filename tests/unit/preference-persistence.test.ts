@@ -10,6 +10,30 @@ function setup() {
   return { memory, manager: new StorageManager() };
 }
 
+test('fresh settings follow browser preferences without persisting a detected default', () => {
+  const descriptor = Object.getOwnPropertyDescriptor(globalThis, 'navigator');
+  try {
+    Object.defineProperty(globalThis, 'navigator', {
+      configurable: true, value: { languages: ['fr-FR', 'en-GB'], language: 'fr-FR' },
+    });
+    const { memory, manager } = setup();
+    assert.equal(manager.getUserSettings().language, 'en');
+    assert.equal(memory.getItem('jipage_settings_v1'), null);
+    memory.setItem('jipage_settings_v1', '{"language":"zh","showDock":false}');
+    assert.equal(manager.getUserSettings().language, 'zh');
+    assert.equal(manager.getUserSettings().showDock, false);
+    assert.equal(memory.getItem('jipage_settings_v1'), '{"language":"zh","showDock":false}');
+    Object.defineProperty(globalThis, 'navigator', {
+      configurable: true, value: { languages: [], language: 'en-AU' },
+    });
+    memory.removeItem('jipage_settings_v1');
+    assert.equal(manager.getUserSettings().language, 'en');
+  } finally {
+    if (descriptor) Object.defineProperty(globalThis, 'navigator', descriptor);
+    else Reflect.deleteProperty(globalThis, 'navigator');
+  }
+});
+
 test('settings write denial propagates and preserves previously saved preferences', () => {
   const { memory, manager } = setup();
   manager.saveUserSettings({ language: 'zh' });

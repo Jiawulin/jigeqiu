@@ -21,6 +21,11 @@ export async function buildExtension() {
   await build({
     configFile: fileURLToPath(new URL('../vite.config.ts', import.meta.url)),
   });
+  await cp(
+    fileURLToPath(new URL('../_locales', import.meta.url)),
+    path.join(extensionOutput, '_locales'),
+    { recursive: true },
+  );
   await mkdir(path.join(extensionOutput, 'icons'), { recursive: true });
   // The existing ICO contains PNG entries at all extension icon sizes.
   const ico = await readFile(path.join(projectRoot, 'public/favicon.ico'));

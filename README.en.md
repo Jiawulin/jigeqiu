@@ -24,7 +24,7 @@ Chrome / Edge new tab extension or deploy the Web version on your own site.
 | Global search | Find bookmarks, switch search engines, and run quick commands |
 | Import and backup | Browser bookmark HTML import, standard HTML export, and JSON asset backups |
 | Personalization | Light and dark themes, glass surfaces, built-in and custom local wallpapers |
-| Bilingual interface | Switch between Simplified Chinese and English |
+| Bilingual interface | Saved choice first; first use follows supported browser preferences (Chinese/English), otherwise Chinese; switch in the interface |
 | Browser extension | Load the extracted ZIP locally and open a new tab; no server required |
 | Static deployment | No application backend, database, or API key required in production |
 

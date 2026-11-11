@@ -1,4 +1,5 @@
 import React, { useState, useEffect } from 'react';
+import { readUserLocale } from './services/user-locale';
 import {
   Bookmark,
   Folder,
@@ -64,9 +65,14 @@ export default function PrototypeApp() {
   const [submissions, setSubmissions] = useState<Submission[]>(() => storage.getSubmissions());
   const [settings, setSettings] = useState<UserSettings>(() => storage.getUserSettings());
   const t = createTranslator(settings.language);
+  useEffect(() => {
+    document.documentElement.lang = resolveLocale(settings.language) === 'en' ? 'en' : 'zh-CN';
+  }, [settings.language]);
   const [libraryChanged, setLibraryChanged] = useState(false);
   useEffect(() => {
     const check = () => {
+      const language = readUserLocale();
+      setSettings(current => current.language === language ? current : { ...current, language });
       try { setLibraryChanged(storage.hasLibraryChanges()); }
       catch { setLibraryChanged(true); }
     };
