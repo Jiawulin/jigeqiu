@@ -18,7 +18,7 @@ const privacySectionsZh = [
   },
   {
     title: '自动网站图标',
-    text: '未授权站点不进行图标或网页元数据的 fetch 读取，仅尝试普通图片展示或文字回退，图片仍可能联网。授权后可能读取该站点的 favicon、常见图标文件、首页 HTML 及声明的 manifest、图标或 Logo。其他域名的资源仍需各自授权才可 fetch，不会自动申请；fetch 不跟随重定向。目标网站可能收到 IP、请求地址及浏览器信息。Google 图标服务默认关闭；启用后可能通过图片请求向该服务发送网站域名，未授权时不会 fetch 读取。',
+    text: '未授权站点不进行图标或网页元数据的 fetch 读取，仅尝试普通图片展示或文字回退，图片仍可能联网。授权后可能读取该站点的 favicon、常见图标文件、首页 HTML 及声明的 manifest、图标或 Logo。其他域名的资源仍需各自授权才可 fetch，不会自动申请；fetch 不跟随重定向。目标网站可能收到 IP、请求地址及浏览器信息。不使用第三方图标聚合服务。',
   },
   {
     title: '手动图片与其他远程资源',
@@ -30,7 +30,7 @@ const privacySectionsZh = [
   },
   {
     title: '外部搜索与网页内容',
-    text: '提交外部搜索时，搜索词及目标网址中的参数会交给你选择的搜索服务，例如 Google、Bing、百度或你配置的其他提供方。普通图标及手动图片的接收方是对应图片地址的站点及其可能重定向的服务；启用 Google 图标服务时，该服务会接收网站域名。打开收藏、外部链接或启用嵌入网页时，目标网站可能收到 IP、浏览器信息及其自身 Cookie。第三方按各自政策处理数据，开发者不能替其承诺保留期限或删除结果。当前扩展不提供匿名代理。自定义 HTTP 图片、搜索或网页地址可能使用未加密连接，请优先使用 HTTPS，不要把敏感内容写入网址或搜索词。',
+    text: '提交外部搜索时，搜索词及目标网址中的参数会交给你选择的搜索服务，例如 Google、Bing、百度或你配置的其他提供方。普通图标及手动图片的接收方是对应图片地址的站点及其可能重定向的服务。打开收藏、外部链接或启用嵌入网页时，目标网站可能收到 IP、浏览器信息及其自身 Cookie。第三方按各自政策处理数据，开发者不能替其承诺保留期限或删除结果。当前扩展不提供匿名代理。自定义 HTTP 图片、搜索或网页地址可能使用未加密连接，请优先使用 HTTPS，不要把敏感内容写入网址或搜索词。',
   },
   {
     title: '数据用途与 Limited Use 承诺',
@@ -69,7 +69,7 @@ const privacySectionsEn = [
   },
   {
     title: 'Automatic site icons',
-    text: 'Without site permission, icons and page metadata are not read using fetch; ordinary images or text fallbacks are used instead. Images may still connect to the network. With permission, the site\'s favicon, common icon files, homepage HTML and declared manifest, icons or logo may be read. Resources on other domains require their own permissions for fetch; these permissions are not requested automatically. Fetch does not follow redirects. Sites may receive your IP address, request URL and browser information. The Google icon service is off by default. Enabling it may send site domains to that service through image requests; fetch reads still require permission.',
+    text: 'Without site permission, icons and page metadata are not read using fetch; ordinary images or text fallbacks are used instead. Images may still connect to the network. With permission, the site\'s favicon, common icon files, homepage HTML and declared manifest, icons or logo may be read. Resources on other domains require their own permissions for fetch; these permissions are not requested automatically. Fetch does not follow redirects. Sites may receive your IP address, request URL and browser information. No third-party favicon aggregation service is used.',
   },
   {
     title: 'Manual images and other remote resources',
@@ -81,7 +81,7 @@ const privacySectionsEn = [
   },
   {
     title: 'External search and web content',
-    text: 'Submitting an external search sends your query and destination URL parameters to your selected service, such as Google, Bing, Baidu or a custom provider. Ordinary icons and manual images contact their image sites and any services they redirect to. Enabling the Google icon service sends site domains to that service. Opening bookmarks, external links or embedded pages may send your IP address, browser information and the destination\'s own cookies to that site. Third parties handle data under their own policies; the developer cannot promise their retention periods or deletion results. There is no anonymous proxy. Custom HTTP image, search or page URLs may use unencrypted connections. Prefer HTTPS and keep sensitive information out of URLs and search queries.',
+    text: 'Submitting an external search sends your query and destination URL parameters to your selected service, such as Google, Bing, Baidu or a custom provider. Ordinary icons and manual images contact their image sites and any services they redirect to. Opening bookmarks, external links or embedded pages may send your IP address, browser information and the destination\'s own cookies to that site. Third parties handle data under their own policies; the developer cannot promise their retention periods or deletion results. There is no anonymous proxy. Custom HTTP image, search or page URLs may use unencrypted connections. Prefer HTTPS and keep sensitive information out of URLs and search queries.',
   },
   {
     title: 'Data use and Limited Use commitment',

@@ -63,10 +63,10 @@ test('brand PNG preserves the approved A2 equator artwork and touch icon has the
   assert.equal(touch.readUInt32BE(20), 180);
 });
 
-test('published wallpapers contain only the two supported built-in presets', () => {
+test('published wallpapers contain only the four supported built-in presets', () => {
   const files = readdirSync(new URL('../../public/wallpapers/', import.meta.url));
   assert.deepEqual(files.filter(file => file.endsWith('.webp')).sort(), [
-    'cyan-lake-desktop.webp', 'cyan-lake-mobile.webp', 'cyan-lake-thumb.webp',
-    'snow-mountain-desktop.webp', 'snow-mountain-mobile.webp', 'snow-mountain-thumb.webp',
-  ]);
+    ...['corner-tower', 'green-lake', 'misty-mountains', 'snow-mountain']
+      .flatMap(id => ['desktop', 'mobile', 'thumb'].map(size => `${id}-${size}.webp`)),
+  ].sort());
 });

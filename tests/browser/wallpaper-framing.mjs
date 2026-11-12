@@ -25,7 +25,7 @@ try {
   await once(server, 'listening');
   const origin = `http://127.0.0.1:${server.address().port}`;
   browser = await chromium.launch({ headless: true });
-  const context = await browser.newContext({ viewport: { width: 1440, height: 900 }, reducedMotion: 'reduce' });
+  const context = await browser.newContext({ locale: 'zh-CN', viewport: { width: 1440, height: 900 }, reducedMotion: 'reduce' });
   await context.route('**/*', route => new URL(route.request().url()).origin === origin ? route.continue() : route.abort());
   const page = await context.newPage();
   const errors = [];
@@ -51,6 +51,8 @@ try {
     await page.getByLabel('选择本地图片', { exact: true }).setInputFiles({
       name: `${width}x${height}.png`, mimeType: 'image/png', buffer: Buffer.from(png, 'base64'),
     });
+    await page.getByRole('button', { name: `使用背景：${width}x${height}.png`, exact: true }).waitFor();
+    await page.waitForFunction(() => !document.querySelector('input[type=file]')?.disabled);
     await ready();
     await page.waitForFunction(async ({ width, height }) => {
       const image = new Image();
@@ -126,9 +128,9 @@ try {
     }
   }
   await appearance();
-  await page.getByRole('button', { name: '选择壁纸：湖泊远山', exact: true }).click();
+  await page.getByRole('button', { name: '选择壁纸：雪山晨光', exact: true }).click();
   await filled(1180, 820);
-  await page.getByRole('button', { name: '使用已保存的图片', exact: true }).click();
+  await page.getByRole('button', { name: '使用背景：900x1600.png', exact: true }).click();
   await ready();
   await page.getByRole('button', { name: '切换为英文', exact: true }).click();
   assert.equal(await page.getByRole('radiogroup', { name: 'Image fit', exact: true }).count(), 0);

@@ -22,7 +22,7 @@ try {
     if (server.exitCode !== null || Date.now() - started > 15_000) throw new Error(output);
     await new Promise(resolve => setTimeout(resolve, 50));
   }
-  const url = `http://127.0.0.1:${port}/wallpapers/cyan-lake-desktop.webp?v=2`;
+  const url = `http://127.0.0.1:${port}/wallpapers/snow-mountain-desktop.webp?v=2`;
   const response = await fetch(url);
   assert.equal(response.status, 200);
   assert.match(response.headers.get('cache-control') ?? '', /public.*max-age=2592000/);

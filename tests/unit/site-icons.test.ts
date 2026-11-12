@@ -5,6 +5,7 @@ import {
 } from '../../src/services/site-icons';
 import * as icons from '../../src/services/site-icons';
 import { createSiteIconPersistence } from '../../src/services/site-icon-persistence';
+import type { SiteIconCandidate } from '../../src/services/site-icon-discovery';
 
 const DAY = 86_400_000;
 const request = { url: 'https://example.test/private/page?token=secret' };
@@ -24,6 +25,7 @@ function harness() {
   const revoked: string[] = [];
   let objectId = 0;
   const deps = {
+    discover: async (_url: string, _options: { signal: AbortSignal }): Promise<SiteIconCandidate[]> => [],
     now: () => now,
     load: async (source: string, _signal: AbortSignal): Promise<{ blob?: Blob }> => {
       calls.push(source);
@@ -49,6 +51,87 @@ function harness() {
   };
 }
 
+test('manual automatic refresh discovers a declared SVG instead of retrying only favicon.ico', async () => {
+  const h = harness();
+  const svg = 'https://example.test/brand/tianmu-viewer.svg';
+  const discovered: string[] = [];
+  h.deps.discover = async (url, options) => {
+    assert.equal(options.signal.aborted, false);
+    discovered.push(url);
+    return [{ url: svg, kind: 'icon', width: 512, height: 512 }];
+  };
+  const service = createSiteIconService(h.deps);
+  await service.refreshSiteIcon(request);
+  assert.deepEqual(discovered, ['https://example.test/']);
+  assert.deepEqual(h.calls, [svg]);
+  assert.deepEqual(service.peekSiteIcon(request), { status: 'ready', src: svg });
+  const reloaded = createSiteIconService(h.deps);
+  reloaded.watchSiteIcon(request, () => {});
+  await tick();
+  assert.deepEqual(reloaded.peekSiteIcon(request), { status: 'ready', src: svg });
+  assert.deepEqual(h.calls, [svg], 'Discovered metadata survives reload without another fetch');
+});
+
+test('automatic display discovers declarations after the usual favicon fails', async () => {
+  const h = harness();
+  const svg = 'https://example.test/brand/icon.svg';
+  h.deps.discover = async () => [{ url: svg, kind: 'icon', width: 512, height: 512 }];
+  h.deps.load = async source => {
+    h.calls.push(source);
+    if (source !== svg) throw new Error('not found');
+    return {};
+  };
+  const service = createSiteIconService(h.deps);
+  service.watchSiteIcon(request, () => {});
+  await tick();
+  assert.deepEqual(service.peekSiteIcon(request), { status: 'ready', src: svg });
+});
+
+test('discovered CDN URLs survive reload and failed refresh preserves the previous image', async () => {
+  const h = harness();
+  const source = 'https://cdn.example.test/brand.svg';
+  h.deps.discover = async () => [{ url: source, kind: 'icon', width: 512, height: 512 }];
+  await createSiteIconService(h.deps).refreshSiteIcon(request);
+  const service = createSiteIconService(h.deps);
+  service.watchSiteIcon(request, () => {});
+  await tick();
+  assert.deepEqual(service.peekSiteIcon(request), { status: 'ready', src: source });
+  h.deps.discover = async () => { throw new Error('CORS'); };
+  h.fail();
+  await assert.rejects(service.refreshSiteIcon(request));
+  assert.deepEqual(service.peekSiteIcon(request), { status: 'ready', src: source });
+});
+
+test('clearing during discovery prevents late candidates from loading or persisting', async () => {
+  const h = harness();
+  const result = deferred<SiteIconCandidate[]>();
+  let signal: AbortSignal | undefined;
+  h.deps.discover = (_url, options) => {
+    signal = options.signal;
+    return result.promise;
+  };
+  const service = createSiteIconService(h.deps);
+  const refresh = service.refreshSiteIcon(request);
+  const rejected = assert.rejects(refresh, /cancelled/);
+  await tick();
+  await service.clearSiteIconCache();
+  assert.equal(signal?.aborted, true);
+  result.resolve([{ url: 'https://cdn.example.test/late.svg', kind: 'icon', width: 512, height: 512 }]);
+  await rejected;
+  assert.deepEqual(h.calls, []);
+  assert.equal(h.records.size, 0);
+});
+
+test('refresh leaves explicit icons and text choices untouched instead of discovering replacements', async () => {
+  const h = harness();
+  let searches = 0;
+  h.deps.discover = async () => { searches++; return []; };
+  const service = createSiteIconService(h.deps);
+  await service.refreshSiteIcon({ ...request, icon: 'https://example.test/chosen.svg', iconMode: 'custom' });
+  await assert.rejects(service.refreshSiteIcon({ ...request, iconMode: 'text' }));
+  assert.deepEqual(h.calls, ['https://example.test/chosen.svg']);
+  assert.equal(searches, 0);
+});
 test('peek is side-effect free; watch immediately emits loading and shares origin resolution', async () => {
   const h = harness();
   const service = createSiteIconService(h.deps);
@@ -70,7 +153,6 @@ test('peek is side-effect free; watch immediately emits loading and shares origi
 test('explicit text mode never requests images, including provider and saved image', async () => {
   const h = harness();
   const service = createSiteIconService(h.deps);
-  service.setThirdPartyIconsEnabled(true);
   const input = { ...request, icon: 'https://custom.test/icon.png', iconMode: 'text' as const };
   assert.deepEqual(service.peekSiteIcon(input), { status: 'fallback' });
   service.watchSiteIcon(input, () => {});
@@ -110,17 +192,16 @@ test('rejects unsafe page URLs before deriving any icon source', async () => {
   assert.equal(h.calls.length, 0);
 });
 
-test('orders explicit, selected platform, official, then only opted-in domain-only Google', async () => {
+test('orders explicit, selected platform and official icons without a provider', async () => {
   const h = harness();
   h.fail();
   const service = createSiteIconService(h.deps);
-  service.setThirdPartyIconsEnabled(true);
   await assert.rejects(service.refreshSiteIcon({
     ...request, icon: 'https://images.test/custom.png', platformIcon: 'https://platform.test/icon.png',
   }));
   assert.deepEqual(h.calls, [
     'https://images.test/custom.png', 'https://platform.test/icon.png',
-    'https://example.test/favicon.ico', 'https://www.google.com/s2/favicons?domain=example.test&sz=128',
+    'https://example.test/favicon.ico',
   ]);
   assert.ok([...h.records.values()].every(record => !JSON.stringify(record).includes('secret')));
 });
@@ -129,7 +210,6 @@ test('unsafe or relative explicit icons are skipped and provider is disabled by 
   const h = harness();
   h.fail();
   const service = createSiteIconService(h.deps);
-  assert.equal(service.getThirdPartyIconsEnabled(), false);
   await assert.rejects(service.refreshSiteIcon({
     ...request, icon: 'data:image/svg+xml,<svg/>', platformIcon: '/relative.png',
   }));
@@ -206,43 +286,7 @@ test('persistence read/write failure degrades to memory but clear failure reject
   await assert.rejects(service.clearSiteIconCache(), /clear failed/);
 });
 
-test('preference failure throws before changing state; successful preference persists separately', () => {
-  const h = harness();
-  const service = createSiteIconService(h.deps);
-  let notifications = 0;
-  const off = service.subscribeIconPreferences(() => { notifications++; });
-  h.deps.preferences.setItem = () => { throw new Error('quota'); };
-  assert.throws(() => service.setThirdPartyIconsEnabled(true), /quota/);
-  assert.equal(service.getThirdPartyIconsEnabled(), false);
-  assert.equal(notifications, 0);
-  h.deps.preferences.setItem = (key, value) => { h.preferences.set(key, value); };
-  service.setThirdPartyIconsEnabled(true);
-  assert.equal(notifications, 1);
-  assert.equal(createSiteIconService(h.deps).getThirdPartyIconsEnabled(), true);
-  off();
-});
-
-test('policy change automatically re-resolves mounted watchers and ignores old inflight results', async () => {
-  const h = harness();
-  const old = deferred<{ blob?: Blob }>();
-  h.deps.load = async source => {
-    h.calls.push(source);
-    if (source.includes('google.com')) return old.promise;
-    throw new Error('official unavailable');
-  };
-  const service = createSiteIconService(h.deps);
-  service.setThirdPartyIconsEnabled(true);
-  service.watchSiteIcon(request, () => {});
-  await tick();
-  service.setThirdPartyIconsEnabled(false);
-  await tick();
-  old.resolve({});
-  await tick();
-  assert.equal(service.peekSiteIcon(request).status, 'fallback');
-  assert.ok([...h.records.values()].every(record => !record.source?.includes('google.com')));
-});
-
-test('clear prevents inflight resurrection, preserves preferences and waits for durable clearing', async () => {
+test('clear prevents inflight resurrection and waits for durable clearing', async () => {
   const h = harness();
   const pending = deferred<{ blob?: Blob }>();
   let loads = 0;
@@ -251,7 +295,6 @@ test('clear prevents inflight resurrection, preserves preferences and waits for 
     throw new Error('new attempt unavailable');
   };
   const service = createSiteIconService(h.deps);
-  service.setThirdPartyIconsEnabled(true);
   service.watchSiteIcon(request, () => {});
   await tick();
   await service.clearSiteIconCache();
@@ -259,7 +302,6 @@ test('clear prevents inflight resurrection, preserves preferences and waits for 
   await tick();
   assert.ok([...h.records.values()].every(record => !record.source && !record.blob));
   assert.equal(service.peekSiteIcon(request).status, 'fallback');
-  assert.equal(service.getThirdPartyIconsEnabled(), true);
 });
 
 test('active object URLs survive capacity pressure and are revoked on clear after notifying watchers', async () => {
@@ -417,19 +459,19 @@ test('a successful explicit source is reused across different page origins, not 
   assert.deepEqual(h.calls, [icon]);
 });
 
-test('opt-in provider never receives local, private, IP-literal or single-label hosts', async () => {
+test('legacy provider opt-in is ignored for public and private hosts', async () => {
   const h = harness();
   h.fail();
   const service = createSiteIconService(h.deps);
-  service.setThirdPartyIconsEnabled(true);
-  for (const host of ['localhost', 'localhost.localdomain', 'router', 'printer.local', 'app.internal', 'home.lan',
+  h.preferences.set('jigeqiu.site-icons.third-party.v1', 'true');
+  for (const host of ['example.com', 'localhost', 'localhost.localdomain', 'router', 'printer.local', 'app.internal', 'home.lan',
     '127.0.0.1', '10.0.0.1', '172.16.2.1', '192.168.1.1', '169.254.1.1', '[::1]', '[fd00::1]', '8.8.8.8']) {
     await assert.rejects(service.refreshSiteIcon({ url: `http://${host}/private` }));
   }
   assert.ok(h.calls.every(source => !source.includes('google.com')));
 });
 
-test('a policy toggle aborts a durable write already in flight', async () => {
+test('clearing the cache aborts a durable write already in flight', async () => {
   const h = harness();
   const started = deferred<void>();
   let aborted = false;
@@ -447,9 +489,10 @@ test('a policy toggle aborts a durable write already in flight', async () => {
   });
   const work = service.refreshSiteIcon(request);
   await started.promise;
-  service.setThirdPartyIconsEnabled(true);
+  const cleared = service.clearSiteIconCache();
   assert.equal(aborted, true);
   await assert.rejects(work, /cancelled/i);
+  await cleared;
 });
 
 test('external SVG URLs use Image sandbox and metadata only, never SVG Blob decoding', async () => {
@@ -473,7 +516,6 @@ test('successful clear restarts mounted watchers without enabling the provider',
   await tick();
   assert.deepEqual(h.calls, ['https://example.test/favicon.ico', 'https://example.test/favicon.ico']);
   assert.equal(service.peekSiteIcon(request).status, 'ready');
-  assert.equal(service.getThirdPartyIconsEnabled(), false);
 });
 
 // A transactional storage boundary, not a cache implementation: production code owns

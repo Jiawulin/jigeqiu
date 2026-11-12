@@ -76,5 +76,8 @@ test('package CLI completes a fresh build with shared styles and correct icon di
     .join('\n');
   assert.match(css, /\.relative\{position:relative\}/);
   assert.ok(entries['brand/logo-a2-equator.png']);
-  assert.ok(entries['wallpapers/cyan-lake-desktop.webp']);
+  assert.equal(entries['wallpapers/cyan-lake-desktop.webp'], undefined);
+  for (const preset of ['snow-mountain', 'misty-mountains', 'corner-tower', 'green-lake']) {
+    assert.ok(entries[`wallpapers/${preset}-desktop.webp`]);
+  }
 });

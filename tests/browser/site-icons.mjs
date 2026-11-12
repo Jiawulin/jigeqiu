@@ -9,7 +9,8 @@ let browser;
 try {
   await server.listen();
   browser = await chromium.launch({ headless: true });
-  const context = await browser.newContext({ viewport: { width: 1200, height: 1000 }, deviceScaleFactor: 2 });
+  const context = await browser.newContext({ viewport: { width: 1200, height: 1000 }, deviceScaleFactor: 2, locale: 'zh-CN' });
+  await context.addInitScript(() => localStorage.setItem('jigeqiu.site-icons.third-party.v1', 'true'));
   context.setDefaultTimeout(12000);
   const page = await context.newPage();
   const errors = [];
@@ -168,18 +169,11 @@ try {
 
   const assets = { bookmarks: [{ title: 'Keep', url: 'https://keep.example/' }], folders: [] };
   await page.evaluate(value => localStorage.setItem('icon-test-assets', JSON.stringify(value)), assets);
-  const consent = page.getByRole('switch', { name: '允许 Google 图标服务', exact: true });
-  assert.equal(await consent.isChecked(), false);
-  await consent.check();
-  await settled();
-  assert.ok([...counts.keys()].some(url => url.startsWith('https://www.google.com/s2/favicons?')));
-  await consent.uncheck();
-  await settled();
-  const googleBefore = [...counts].filter(([url]) => url.includes('google.com'));
+  assert.equal(await page.getByRole('switch', { name: '允许 Google 图标服务', exact: true }).count(), 0);
   await page.getByRole('button', { name: '清除图标缓存', exact: true }).click();
   await page.getByRole('status').filter({ hasText: '图标缓存已清除' }).waitFor();
   await settled();
-  assert.deepEqual([...counts].filter(([url]) => url.includes('google.com')), googleBefore, 'Disabled provider is not retried on cache clear');
+  assert.deepEqual([...counts].filter(([url]) => url.includes('google.com')), [], 'Legacy opt-in cannot enable provider requests');
   assert.deepEqual(await page.evaluate(() => JSON.parse(localStorage.getItem('icon-test-assets'))), assets);
 
   await mkdir(screenshots, { recursive: true });
@@ -273,7 +267,7 @@ try {
   await page.getByRole('navigation', { name: '管理中心导航', exact: true })
     .getByRole('button', { name: '外观', exact: true }).click();
   await page.getByRole('region', { name: '网站图标', exact: true }).waitFor();
-  assert.equal(await page.getByRole('switch', { name: '允许 Google 图标服务' }).isChecked(), false);
+  assert.equal(await page.getByRole('switch', { name: '允许 Google 图标服务' }).count(), 0);
   await page.getByRole('button', { name: '清除图标缓存', exact: true }).click();
   await page.getByRole('status').filter({ hasText: '图标缓存已清除' }).waitFor();
   assert.equal(await page.evaluate(() => localStorage.getItem('jipage_library_v2')), bookmarkBytes);
@@ -315,7 +309,7 @@ try {
         const store = transaction.objectStore('icons');
         const read = store.getAll();
         read.onsuccess = () => {
-          const record = read.result.find(record => record.source === 'https://square.icons.test/favicon.ico');
+          const record = read.result.find(record => record.key === JSON.stringify([false, ['https://square.icons.test/favicon.ico'], null]));
           if (!record) { transaction.abort(); reject(new Error('Missing corruption fixture')); return; }
           store.put({ ...record, blob: { size: 1 } });
         };
@@ -345,7 +339,7 @@ try {
     }
   }
   assert.deepEqual(errors, []);
-  console.log('PASS: circular 60%-width Han glyphs at every size, six stable day/night palettes with 4.5:1 contrast, reversible theme switching, original shapes/pixels/transparent backgrounds, visibility-gated loads, explicit precedence, shared and persistent blob/negative cache, remote-offline reuse, refresh failure retention, opt-in privacy, non-destructive clear, external SVG/CORS metadata-only fallback, corrupted-cache recovery, desktop/Dock/Launchpad/library integration and screenshots');
+  console.log('PASS: circular 60%-width Han glyphs at every size, six stable day/night palettes with 4.5:1 contrast, reversible theme switching, original shapes/pixels/transparent backgrounds, visibility-gated loads, explicit precedence, shared and persistent blob/negative cache, remote-offline reuse, refresh failure retention, no provider requests despite legacy opt-in, non-destructive clear, external SVG/CORS metadata-only fallback, corrupted-cache recovery, desktop/Dock/Launchpad/library integration and screenshots');
 } finally {
   await browser?.close();
   await server.close();

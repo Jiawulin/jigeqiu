@@ -19,7 +19,7 @@ try {
   page.on('pageerror', error => errors.push(error.message));
   const url = `http://127.0.0.1:${server.httpServer.address().port}`;
   await page.goto(url);
-  const presets = ['cyan-lake', 'snow-mountain'];
+  const presets = ['snow-mountain', 'misty-mountains', 'corner-tower', 'green-lake'];
   const seed = async (preset, appearance = 'light-glass') => {
     await page.evaluate(async ({ preset, appearance }) => {
       localStorage.clear();
@@ -39,6 +39,7 @@ try {
       const { StorageManager } = await import('/src/services/storage.ts');
       new StorageManager().setDesktopPins(Array.from({ length: 14 }, (_, i) => `appearance-${i}`), true);
     }, { preset, appearance });
+    await page.goto(`${url}/#/`);
     await page.reload();
     await page.locator('[data-wallpaper-canvas]').evaluate(async element => {
       const url = getComputedStyle(element).backgroundImage.match(/url\("?(.*?)"?\)/)?.[1];
@@ -125,7 +126,7 @@ try {
     assert.ok(!dayWash.backdrop.includes('255 255 255'), 'Day wallpaper wash does not whiten the image');
     assert.equal(dayWash.text, '#182024', 'Day foreground still uses its existing light-theme colors');
     await page.screenshot({ path: `/tmp/jigeqiu-appearance/${preset}-desktop-light.png` });
-    if (preset === 'cyan-lake') await page.screenshot({ path: '/tmp/jigeqiu-appearance/desktop-light.png' });
+    if (preset === 'snow-mountain') await page.screenshot({ path: '/tmp/jigeqiu-appearance/desktop-light.png' });
     await open();
     assert.equal(await launchpad.evaluate(el => getComputedStyle(el).backdropFilter), 'none',
       'Launchpad must not blur or expose the desktop icons behind it');
@@ -142,7 +143,7 @@ try {
       return { expected, actual: getComputedStyle(el, '::after').backgroundImage };
     });
     assert.equal(launchpadWash.actual, launchpadWash.expected, 'Launchpad reuses desktop wallpaper and stage washes');
-    if (preset === 'cyan-lake') {
+    if (preset === 'snow-mountain') {
       const withDesktop = await page.screenshot();
       await page.getByTestId('desktop-viewport').evaluate(el => { el.style.visibility = 'hidden'; });
       const withoutDesktop = await page.screenshot();
@@ -167,9 +168,9 @@ try {
     await launchpad.getByRole('button', { name: '跳转到 N', exact: true }).click();
     assert.equal(await launchpad.getByRole('button', { name: 'Notion', exact: true })
       .evaluate(el => el === document.activeElement), true, 'Letter index reaches the first matching bookmark');
-    if (preset === 'cyan-lake') await page.screenshot({ path: '/tmp/jigeqiu-appearance/launchpad-light.png' });
+    if (preset === 'snow-mountain') await page.screenshot({ path: '/tmp/jigeqiu-appearance/launchpad-light.png' });
     await page.keyboard.press('Escape');
-    if (preset === 'cyan-lake') await checkGuide('light');
+    if (preset === 'snow-mountain') await checkGuide('light');
     await page.getByRole('button', { name: '切换夜间模式', exact: true }).click();
     await settle();
     darkBackgrounds.add(await page.locator('[data-wallpaper-canvas]').evaluate(el => getComputedStyle(el).backgroundImage));
@@ -177,15 +178,15 @@ try {
     const dock = page.getByTestId('bottom-dock').locator('.liquid-glass-dock');
     const dockChannels = await dock.evaluate(el => getComputedStyle(el).backgroundColor.match(/[\d.]+/g).slice(0, 3).map(Number));
     assert.ok(dockChannels.every(value => value < 80), 'Dock changes to a dark surface');
-    if (preset === 'cyan-lake') await page.screenshot({ path: '/tmp/jigeqiu-appearance/desktop-dark.png' });
+    if (preset === 'snow-mountain') await page.screenshot({ path: '/tmp/jigeqiu-appearance/desktop-dark.png' });
     await page.screenshot({ path: `/tmp/jigeqiu-appearance/${preset}-desktop-dark.png` });
     await open();
     assert.ok(await contrast(search) >= 4.5, 'Night search has readable foreground/background contrast');
     const nightChannels = await search.evaluate(el => getComputedStyle(el).backgroundColor.match(/[\d.]+/g).slice(0, 3).map(Number));
     assert.ok(nightChannels.every(value => value < 80), 'Night search never becomes a light panel');
     assert.equal(await heading.evaluate(el => getComputedStyle(el).color), 'rgb(242, 245, 244)');
-    if (preset === 'cyan-lake') await page.screenshot({ path: '/tmp/jigeqiu-appearance/launchpad-dark.png' });
-    if (preset === 'cyan-lake') {
+    if (preset === 'snow-mountain') await page.screenshot({ path: '/tmp/jigeqiu-appearance/launchpad-dark.png' });
+    if (preset === 'snow-mountain') {
       await page.keyboard.press('Escape');
       await checkGuide('dark');
     }
@@ -214,7 +215,7 @@ try {
   await page.emulateMedia({ reducedMotion: 'reduce' });
   assert.equal(await launchpad.evaluate(el => getComputedStyle(el).transitionDuration), '0s');
   const session = await context.newCDPSession(page);
-  await seed('cyan-lake', 'dark-glass');
+  await seed('snow-mountain', 'dark-glass');
   await session.send('Emulation.setEmulatedMedia', {
     features: [{ name: 'prefers-reduced-transparency', value: 'reduce' }],
   });

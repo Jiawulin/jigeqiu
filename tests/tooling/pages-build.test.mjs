@@ -79,7 +79,12 @@ test('root and Pages builds keep assets and sharing metadata within their deploy
         if (!file.endsWith('.css')) continue;
         css += await readFile(path.join(output, 'assets', file), 'utf8');
       }
-      for (const name of ['cyan-lake', 'snow-mountain']) {
+      for (const name of [
+        'snow-mountain',
+        'misty-mountains',
+        'corner-tower',
+        'green-lake',
+      ]) {
         for (const size of ['desktop', 'mobile', 'thumb']) {
           assert.ok(css.includes(`${base}wallpapers/${name}-${size}.webp`));
         }

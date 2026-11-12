@@ -1070,7 +1070,7 @@ export const DEFAULT_PUBLIC_USERS: PublicUser[] = [
 
 export const DEFAULT_USER_SETTINGS: UserSettings = {
   appearanceMode: 'light-glass',
-  wallpaperPreset: 'cyan-lake',
+  wallpaperPreset: 'snow-mountain',
   desktopViewMode: 'icon',
   defaultSearchEngineId: 'se-google',
   confirmBatchOpen: true,

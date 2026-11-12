@@ -11,14 +11,28 @@ https://www.pexels.com/terms-of-service/
 
 | Preset key | Subject | Source photo |
 | --- | --- | --- |
-| cyan-lake | Mountain lake reflection | https://www.pexels.com/photo/346529/ |
 | snow-mountain | Snowy mountain and winter forest | https://www.pexels.com/photo/mountain-covered-with-snow-688659/ |
+| misty-mountains | Misty mountains, Alessio Soggetti | https://unsplash.com/photos/gdE-5Oui1Y0 |
+| corner-tower | Corner tower and moon, Zixi Zhou | https://unsplash.com/photos/L7B3VHgOoVM |
+| green-lake | Green mountain reflections, Adem Percem | https://unsplash.com/photos/b_BCfhShIr0 |
+
+The three Unsplash originals were supplied by the project owner on November 12,
+2026. Contributor names and photo identifiers are recorded from the supplied
+filenames. License reference: https://unsplash.com/license .
+Verification attempted November 12, 2026: the official license/photo pages
+returned a browser-verification challenge in this environment. Current license
+terms and the individual photo pages were therefore NOT independently verified.
+Confirm the source photos and applicable redistribution rights before public
+release. This project's MIT license does not license these photographs.
+No Unsplash API is used and no source images are fetched at runtime.
 
 For each source photo, request the high-quality 3840px-wide JPG from:
 `https://images.pexels.com/photos/PHOTO_ID/pexels-photo-PHOTO_ID.jpeg?cs=tinysrgb&w=3840&q=95`
 The platform returns native dimensions when an image is smaller than requested.
 
-Processing: crop for landscape/portrait composition; retain up to 3840px for
+Processing: preserve full landscape composition for new photos; crop portrait
+copies to 2:3 (tower centered, green lake crop shifted toward the reflections).
+Retain up to 3840px for
 desktop (3024-3840px depending on source), 1200px for portrait, and 320px for
 the settings thumbnail. Encode desktop WebP at quality 88 and portrait at 85;
 remove metadata. No source image is artificially upscaled.
@@ -30,10 +44,14 @@ validators for `/wallpapers`, in development and production. Other deployment
 hosts must configure an equivalent static-file cache policy.
 
 To reproduce, download the sources to a local directory using the filenames
-`jigeqiu-lake-hi.jpg` and `jigeqiu-snow-hi.jpg`, then run:
+`jigeqiu-snow-hi.jpg`, `alessio-soggetti-gdE-5Oui1Y0-unsplash.jpg`,
+`zixi-zhou-L7B3VHgOoVM-unsplash.jpg`, and
+`adem-percem-b_BCfhShIr0-unsplash.jpg`, then run:
 
 ```sh
 node scripts/prepare-wallpapers.mjs /path/to/source-directory
 ```
 
 Requires the `cwebp` encoder. Source JPGs are not needed at runtime.
+An already generated snow-mountain set is preserved if its source is absent.
+Quality decreases in steps of 5 only when the configured size budget is exceeded.

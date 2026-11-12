@@ -1,9 +1,9 @@
-import React, { useEffect, useRef, useState, useSyncExternalStore } from 'react';
+import React, { useEffect, useRef, useState } from 'react';
 import { Check, ChevronDown, Image as ImageIcon, Link, LoaderCircle, Type } from 'lucide-react';
 import type { SiteIconMode } from '../../types';
 import { normalizeBookmarkIcon, normalizeBookmarkUrl } from '../../services/bookmark-input';
-import { discoverSiteIcons, rankSiteIconCandidates, type SiteIconCandidate } from '../../services/site-icon-discovery';
-import { getThirdPartyIconsEnabled, subscribeIconPreferences, validateSiteIconSource } from '../../services/site-icons';
+import { rankSiteIconCandidates, type SiteIconCandidate } from '../../services/site-icon-discovery';
+import { discoverValidatedSiteIcons, validateSiteIconSource } from '../../services/site-icons';
 import { FaviconImage } from './FaviconImage';
 import { createTranslator } from '../../i18n';
 
@@ -31,7 +31,6 @@ export function SiteIconPicker({ url, title, value, onChange, language = 'zh' }:
   const change = useRef(onChange);
   choice.current = value;
   change.current = onChange;
-  const thirdParty = useSyncExternalStore(subscribeIconPreferences, getThirdPartyIconsEnabled, () => false);
   let pageURL = '';
   try {
     const normalized = normalizeBookmarkUrl(url);
@@ -66,9 +65,8 @@ export function SiteIconPicker({ url, title, value, onChange, language = 'zh' }:
           change.current({ iconMode: 'auto', icon: recommended.url });
         }
       };
-      void discoverSiteIcons(pageURL, {
-        signal: controller.signal, thirdParty,
-        validateCandidate: validateSiteIconSource,
+      void discoverValidatedSiteIcons(pageURL, {
+        signal: controller.signal,
         onCandidate(candidate) {
           if (controller.signal.aborted) return;
           found.set(candidate.url, candidate);
@@ -83,7 +81,7 @@ export function SiteIconPicker({ url, title, value, onChange, language = 'zh' }:
       });
     }, 450);
     return () => { clearTimeout(timer); controller.abort(); };
-  }, [pageURL, active, thirdParty]);
+  }, [pageURL, active]);
 
   let imageURL = '';
   try { imageURL = normalizeBookmarkIcon(draft.trim(), 'custom').icon ?? ''; } catch { /* Invalid draft remains editable. */ }

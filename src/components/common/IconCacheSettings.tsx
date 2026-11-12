@@ -1,37 +1,18 @@
-import React, { useState, useSyncExternalStore } from 'react';
+import React, { useState } from 'react';
 import { LoaderCircle, Trash2 } from 'lucide-react';
 import { createTranslator } from '../../i18n';
-import {
-  clearSiteIconCache, getThirdPartyIconsEnabled, setThirdPartyIconsEnabled, subscribeIconPreferences,
-} from '../../services/site-icons';
+import { clearSiteIconCache } from '../../services/site-icons';
 
 export function IconCacheSettings({ language = 'zh' }: { language?: string }) {
   const t = createTranslator(language);
-  const enabled = useSyncExternalStore(subscribeIconPreferences, getThirdPartyIconsEnabled, () => false);
   const [busy, setBusy] = useState(false);
-  const [message, setMessage] = useState<'iconSettingsSaveFailed' | 'iconSettingsCleared' | 'iconSettingsClearFailed' | ''>('');
+  const [message, setMessage] = useState<'iconSettingsCleared' | 'iconSettingsClearFailed' | ''>('');
   const [failed, setFailed] = useState(false);
   return <section aria-label={t('iconSettingsTitle')}
     className="space-y-3 border-t border-slate-200/50 pt-4 dark:border-white/10">
     <h4 className="text-xs font-bold text-slate-800 dark:text-slate-200">{t('iconSettingsTitle')}</h4>
-    <label className="flex items-center justify-between gap-4 text-xs text-slate-800 dark:text-slate-200">
-      <span>{t('iconSettingsAllow')}</span>
-      <input type="checkbox" role="switch" checked={enabled} disabled={busy}
-        className="h-4 w-4 shrink-0 cursor-pointer accent-sky-600"
-        onChange={async event => {
-          const checked = event.target.checked;
-          setBusy(true);
-          setMessage('');
-          setFailed(false);
-          try { await setThirdPartyIconsEnabled(checked); }
-          catch {
-            setFailed(true);
-            setMessage('iconSettingsSaveFailed');
-          } finally { setBusy(false); }
-        }} />
-    </label>
     <p className="text-[11px] leading-relaxed text-slate-500 dark:text-slate-400">
-      {t('iconSettingsPrivacy')}
+      {t('iconSettingsLocalCache')}
     </p>
     <div className="flex flex-wrap items-center gap-3">
       <button type="button" disabled={busy} onClick={async () => {

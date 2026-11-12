@@ -15,8 +15,10 @@ test('custom wallpapers accept bounded raster files only', () => {
 });
 
 test('removed presets and missing custom image use the first built-in fallback', () => {
-  for (const preset of ['arch-sky', 'coastal-dusk', 'botanic-sage', 'custom', 'unknown']) {
-    assert.equal(visibleWallpaper(preset), 'cyan-lake');
+  for (const preset of ['cyan-lake', 'arch-sky', 'coastal-dusk', 'botanic-sage', 'custom', 'unknown']) {
+    assert.equal(visibleWallpaper(preset), 'snow-mountain');
   }
-  assert.equal(visibleWallpaper('snow-mountain'), 'snow-mountain');
+  for (const preset of ['snow-mountain', 'misty-mountains', 'corner-tower', 'green-lake']) {
+    assert.equal(visibleWallpaper(preset), preset);
+  }
 });

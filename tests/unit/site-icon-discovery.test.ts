@@ -10,7 +10,7 @@ const common = [
   'favicon.ico', 'favicon.svg', 'apple-touch-icon.png', 'apple-touch-icon-precomposed.png',
   'favicon-192x192.png', 'favicon-32x32.png',
 ].map(path => `${origin}/${path}`);
-const options = () => ({ signal: new AbortController().signal, thirdParty: false });
+const options = () => ({ signal: new AbortController().signal });
 const tick = () => new Promise<void>(resolve => setImmediate(resolve));
 function response(text: string, url = `${origin}/`, headers: Record<string, string> = {}) {
   const result = new Response(text, { headers });
@@ -148,16 +148,16 @@ test('unsafe inputs perform no fetch or image requests', async () => {
   assert.equal(h.probes.length, 0);
 });
 
-test('Google 128 is opt-in and receives only public hostnames with existing local-name exclusions', async () => {
+test('discovery never requests a provider for public or private hostnames', async () => {
   for (const host of ['localhost', 'x.localhost', 'x.localdomain', 'x.local', 'x.internal',
     'x.lan', 'x.home', 'x.arpa', 'x.onion', 'x.invalid', '127.0.0.1', '[::1]', 'printer']) {
     const h = harness();
-    await h.discover(`https://${host}/secret?token=private`, { ...options(), thirdParty: true });
+    await h.discover(`https://${host}/secret?token=private`, options());
     assert.ok(h.probes.every(url => !url.includes('google.com')), host);
   }
   const h = harness();
-  await h.discover(page, { ...options(), thirdParty: true });
-  assert.equal(h.probes.at(-1), 'https://www.google.com/s2/favicons?domain=example.test&sz=128');
+  await h.discover(page, options());
+  assert.deepEqual(h.probes, common);
   assert.ok(h.probes.every(url => !url.includes('secret')));
 });
 
@@ -218,7 +218,7 @@ test('bounds manifests to eight icons, total candidates to sixteen, and probes t
     : response('<link rel="manifest" href="/app.webmanifest"><img id="logo" src="/logo.png"><img id="logo2" src="/logo2.png">');
   for (let i = 0; i < 40; i++) h.sizes.set(`${origin}/manifest-${i}.png`, [192, 192]);
   for (const url of [...common, `${origin}/logo.png`, `${origin}/logo2.png`]) h.sizes.set(url, [192, 192]);
-  const result = await h.discover(page, { ...options(), thirdParty: true });
+  const result = await h.discover(page, options());
   assert.equal(h.probes.filter(url => url.includes('/manifest-')).length, 8);
   assert.equal(h.probes.length, 16);
   assert.ok(result.length <= 16);

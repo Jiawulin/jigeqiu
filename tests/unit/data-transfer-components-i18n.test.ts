@@ -74,18 +74,19 @@ test('JSON import retains error identity while switching locales', async () => {
   assert.match(text(view.render()), /无法识别此文件，请选择有效的 JSON 资产备份。/);
 });
 
-test('icon settings rerender failed saves and successful cache clearing in the current language', async () => {
+test('icon settings rerender failed and successful cache clearing in the current language', async () => {
+  let fail = true;
   const view = harness('common/IconCacheSettings', 'IconCacheSettings', {
     '../../services/site-icons': {
-      setThirdPartyIconsEnabled() { throw new Error('STORAGE_WRITE_FAILED'); },
-      clearSiteIconCache: async () => {}, subscribeIconPreferences() {}, getThirdPartyIconsEnabled: () => false,
+      clearSiteIconCache: async () => { if (fail) throw new Error('STORAGE_WRITE_FAILED'); },
     },
   });
   assert.equal((view.render().props as Record<string, unknown>)['aria-label'], 'Website icons');
-  view.find(node => node.props.role === 'switch').props.onChange({ target: { checked: true } });
-  assert.match(text(view.render()), /Could not save icon preferences/);
+  await view.find(node => node.type === 'button').props.onClick();
+  assert.match(text(view.render()), /Could not fully clear the icon cache/);
   view.props.language = 'zh';
-  assert.match(text(view.render()), /无法保存图标偏好，请检查浏览器存储权限/);
+  assert.match(text(view.render()), /图标缓存未能完全清除/);
+  fail = false;
   await view.find(node => node.type === 'button').props.onClick();
   assert.match(text(view.render()), /图标缓存已清除，收藏数据未改变/);
   view.props.language = 'en-US';

@@ -7,10 +7,22 @@
   --wallpaper-label-shadow: 0 1px 2px rgb(0 0 0 / 90%), 0 1px 5px rgb(0 0 0 / 65%);
 }
 
-[data-wallpaper="cyan-lake"] {
-  --wallpaper-base: #d6e7e8;
-  --wallpaper-image: url("/wallpapers/cyan-lake-desktop.webp?v=2");
-  --wallpaper-thumbnail: url("/wallpapers/cyan-lake-thumb.webp?v=2");
+[data-wallpaper="misty-mountains"] {
+  --wallpaper-base: #c1d8dd;
+  --wallpaper-image: url("/wallpapers/misty-mountains-desktop.webp?v=2");
+  --wallpaper-thumbnail: url("/wallpapers/misty-mountains-thumb.webp?v=2");
+}
+
+[data-wallpaper="corner-tower"] {
+  --wallpaper-base: #8ba6bd;
+  --wallpaper-image: url("/wallpapers/corner-tower-desktop.webp?v=2");
+  --wallpaper-thumbnail: url("/wallpapers/corner-tower-thumb.webp?v=2");
+}
+
+[data-wallpaper="green-lake"] {
+  --wallpaper-base: #9dab93;
+  --wallpaper-image: url("/wallpapers/green-lake-desktop.webp?v=2");
+  --wallpaper-thumbnail: url("/wallpapers/green-lake-thumb.webp?v=2");
 }
 
 [data-wallpaper="snow-mountain"] {
@@ -120,6 +132,8 @@
 }
 
 @media (max-width: 767px) {
-  [data-wallpaper="cyan-lake"] { --wallpaper-image: url("/wallpapers/cyan-lake-mobile.webp?v=2"); }
+  [data-wallpaper="misty-mountains"] { --wallpaper-image: url("/wallpapers/misty-mountains-mobile.webp?v=2"); }
+  [data-wallpaper="corner-tower"] { --wallpaper-image: url("/wallpapers/corner-tower-mobile.webp?v=2"); }
+  [data-wallpaper="green-lake"] { --wallpaper-image: url("/wallpapers/green-lake-mobile.webp?v=2"); }
   [data-wallpaper="snow-mountain"] { --wallpaper-image: url("/wallpapers/snow-mountain-mobile.webp?v=2"); }
 }

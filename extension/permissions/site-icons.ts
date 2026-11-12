@@ -4,7 +4,7 @@ import {
 } from '../../src/services/site-icons';
 import { createSiteIconPersistence } from '../../src/services/site-icon-persistence';
 import { browserPermissions, permissionFetch } from './network';
-import { applicationStorage, mutateStorage } from '../../src/services/application-storage';
+import { discoverSiteIcons } from './site-icon-discovery';
 export * from '../../src/services/site-icons';
 
 function loadImage(source: string, signal: AbortSignal): Promise<void> {
@@ -52,13 +52,8 @@ const load = createSiteIconLoader({
 const service = createSiteIconService({
   now: Date.now,
   load,
+  discover: discoverValidatedSiteIcons,
   persistence: createSiteIconPersistence(),
-  preferences: {
-    getItem: (key) => applicationStorage().getItem(key),
-    setItem: (key, value) => {
-      if (applicationStorage().getItem(key) !== value) applicationStorage().setItem(key, value);
-    },
-  },
   createObjectURL: (blob) => URL.createObjectURL(blob),
   revokeObjectURL: (url) => URL.revokeObjectURL(url),
 });
@@ -73,13 +68,10 @@ export const peekSiteIcon = service.peekSiteIcon;
 export const watchSiteIcon = service.watchSiteIcon;
 export const refreshSiteIcon = service.refreshSiteIcon;
 export const clearSiteIconCache = service.clearSiteIconCache;
-export const getThirdPartyIconsEnabled = service.getThirdPartyIconsEnabled;
-export const setThirdPartyIconsEnabled = async (enabled: boolean): Promise<void> => {
-  await mutateStorage(() => applicationStorage().setItem('jigeqiu.site-icons.third-party.v1', String(enabled)));
-  service.setThirdPartyIconsEnabled(enabled);
-};
-window.addEventListener('application-storage-change', () => {
-  try { service.setThirdPartyIconsEnabled(applicationStorage().getItem('jigeqiu.site-icons.third-party.v1') === 'true'); }
-  catch { /* Keep the last committed preference when storage is unavailable. */ }
-});
-export const subscribeIconPreferences = service.subscribeIconPreferences;
+
+export function discoverValidatedSiteIcons(
+  url: string,
+  options: { signal: AbortSignal; onCandidate?: (candidate: import('../../src/services/site-icon-discovery').SiteIconCandidate) => void },
+) {
+  return discoverSiteIcons(url, { ...options, validateCandidate: load });
+}

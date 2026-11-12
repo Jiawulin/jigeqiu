@@ -60,7 +60,7 @@ export default function ImportWorkspace() {
       </div>;
     });
   return (
-    <WallpaperBackground preset="cyan-lake" appearance="light-glass">
+    <WallpaperBackground preset="snow-mountain" appearance="light-glass">
       <div className="ws">
         <header className="ws-header">
           <button className="ws-brand" onClick={() => setView('desktop')} aria-label="记个球首页">

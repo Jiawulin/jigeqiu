@@ -110,6 +110,8 @@ Keep the extracted folder in place: the browser still needs its files.
 Resolve any conflict with another extension replacing the new tab.
 Local installation does not mean remote icons, external search, or websites work offline.
 
+Website icons do not use third-party favicon aggregation services. Bookmark forms and Launchpad share discovery and validation. Failed automatic icons and manual refreshes try homepage declarations, manifests and common icon paths. CORS and extension site permissions still apply; image URLs can be entered manually. SVGs are displayed only as external images. Local icon caches can still be cleared in appearance settings.
+
 #### Extension Updates and Data
 
 1. Export an asset backup from **Manage → Import & export → Backup & restore** and keep it outside the browser.
@@ -240,6 +242,7 @@ write to your library, and importing does not automatically populate your deskto
 - Use library folders to organize assets and desktop folders to group shortcuts independently.
 - Pin frequently used bookmarks to the taskbar, or access your entire library through the launchpad.
 - Open **Manage → Appearance** to switch themes, select a wallpaper, or upload a local background.
+- Choose from four built-in backgrounds, or keep multiple images in **My backgrounds**. New uploads never replace earlier images; select or delete each image individually.
 
 Removing a desktop shortcut or unpinning a taskbar item does not delete the
 bookmark. Deleted bookmarks go to the recycle bin; pin them again after restoring

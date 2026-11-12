@@ -1,10 +1,11 @@
 import { createSiteIconPersistence } from './site-icon-persistence';
 import type { SiteIconMode } from '../types';
+import { discoverSiteIcons, type SiteIconCandidate } from './site-icon-discovery';
 
 export type SiteIconRequest = { url: string; icon?: string; iconMode?: SiteIconMode; platformIcon?: string };
 export type SiteIconState = { status: 'loading' | 'ready' | 'fallback'; src?: string };
 export type SiteIconRecord = {
-  key: string; source?: string; blob?: Blob; updatedAt: number; failedAt?: number; accessedAt: number;
+  key: string; source?: string; blob?: Blob; discovered?: boolean; updatedAt: number; failedAt?: number; accessedAt: number;
 };
 export interface SiteIconPersistence {
   read(key: string): Promise<SiteIconRecord | undefined>;
@@ -15,7 +16,7 @@ interface Dependencies {
   now: () => number;
   load: (source: string, signal: AbortSignal) => Promise<{ blob?: Blob }>;
   persistence: SiteIconPersistence;
-  preferences: Pick<Storage, 'getItem' | 'setItem'>;
+  discover: (url: string, options: { signal: AbortSignal }) => Promise<SiteIconCandidate[]>;
   createObjectURL: (blob: Blob) => string;
   revokeObjectURL: (url: string) => void;
 }
@@ -23,7 +24,6 @@ const DAY = 86_400_000;
 const MAX_ENTRIES = 256;
 const MAX_BYTES = 20 * 1024 * 1024;
 const MAX_IMAGE_BYTES = 512 * 1024;
-const PREFERENCE_KEY = 'jigeqiu.site-icons.third-party.v1';
 const LOADING: SiteIconState = Object.freeze({ status: 'loading' });
 const FALLBACK: SiteIconState = Object.freeze({ status: 'fallback' });
 
@@ -36,45 +36,44 @@ function safeURL(value?: string): URL | undefined {
     return url;
   } catch { return; }
 }
-function candidates(request: SiteIconRequest, provider: boolean) {
+function isLegacyProvider(url?: URL) {
+  return url?.hostname === 'www.google.com' && url.pathname.startsWith('/s2/favicons');
+}
+function candidates(request: SiteIconRequest) {
   const page = safeURL(request.url);
   if (!page || request.iconMode === 'text') return { sources: [] as string[], userSource: undefined as string | undefined };
   const selectedURL = safeURL(request.icon);
-  const selectedSource = !provider && request.iconMode === 'auto' &&
-    selectedURL?.hostname === 'www.google.com' && selectedURL.pathname.startsWith('/s2/favicons')
+  const selectedSource = request.iconMode !== 'custom' && isLegacyProvider(selectedURL)
     ? undefined : selectedURL?.href;
   const userSource = request.iconMode === 'auto' ? undefined : selectedSource;
   const sources = [selectedSource, safeURL(request.platformIcon)?.href, `${page.origin}/favicon.ico`];
-  const host = page.hostname.replace(/\.$/, '');
-  const publicHost = host.includes('.') && !host.includes(':') && !/^[\d.]+$/.test(host) &&
-    !/(^|\.)(localhost|localdomain|local|internal|lan|home|arpa|onion|invalid)$/.test(host);
-  if (provider && publicHost) sources.push(`https://www.google.com/s2/favicons?domain=${encodeURIComponent(host)}&sz=128`);
   return { sources: [...new Set(sources.filter((source): source is string => !!source))], userSource };
 }
 type Entry = {
   key: string; sources: string[]; userSource?: string; state: SiteIconState;
   record?: SiteIconRecord; hydrated: boolean; inflight?: Promise<void>; forceRequested?: boolean;
   controller?: AbortController; watchers: Set<Watcher>; accessedAt: number; ownedURL?: string;
+  origin?: string; automatic: boolean;
 };
 type Watcher = { request: SiteIconRequest; listener: (state: SiteIconState) => void; entry: Entry };
 
 export function createSiteIconService(deps: Dependencies) {
-  let enabled = false;
-  try { enabled = deps.preferences.getItem(PREFERENCE_KEY) === 'true'; } catch { /* Privacy defaults off. */ }
   let generation = 0;
   let durableQueue = Promise.resolve();
   let clearBarrier = Promise.resolve();
   const entries = new Map<string, Entry>();
   const watchers = new Set<Watcher>();
-  const preferenceListeners = new Set<() => void>();
   const sourceLoads = new Map<string, Promise<{ blob?: Blob }>>();
   function entryFor(request: SiteIconRequest): Entry {
-    const { sources, userSource } = candidates(request, enabled);
-    const key = JSON.stringify([enabled, sources, userSource ?? null]);
+    const { sources, userSource } = candidates(request);
+    // Retain the old provider-disabled cache identity without reading its preference.
+    const key = JSON.stringify([false, sources, userSource ?? null]);
     let entry = entries.get(key);
     if (!entry) {
       entry = { key, sources, userSource, state: sources.length ? LOADING : FALLBACK,
-        hydrated: false, watchers: new Set(), accessedAt: deps.now() };
+        hydrated: false, watchers: new Set(), accessedAt: deps.now(),
+        origin: safeURL(request.url)?.origin,
+        automatic: request.iconMode !== 'text' && request.iconMode !== 'custom' && !userSource };
       entries.set(key, entry);
     }
     entry.accessedAt = deps.now();
@@ -137,7 +136,8 @@ export function createSiteIconService(deps: Dependencies) {
           const record = await deps.persistence.read(entry.key);
           if (!current()) throw new Error('Icon resolution cancelled');
           if (record && record.key === entry.key && Number.isFinite(record.updatedAt) &&
-              (!record.source || entry.sources.includes(record.source)) &&
+              (!record.source || entry.sources.includes(record.source) ||
+                (entry.automatic && record.discovered === true && !!safeURL(record.source) && !isLegacyProvider(safeURL(record.source)))) &&
               (record.blob === undefined || (record.blob instanceof Blob && record.blob.size <= MAX_IMAGE_BYTES))) {
             if (record.source) showRecord(entry, record);
             else {
@@ -153,7 +153,33 @@ export function createSiteIconService(deps: Dependencies) {
       if (!current()) throw new Error('Icon resolution cancelled');
       if (!entry.forceRequested && !due(entry)) return;
       let lastError: unknown = new Error('No usable site icon');
-      for (const source of entry.sources) {
+      let searched = false;
+      const queue = [...entry.sources];
+      const discovered = new Set<string>();
+      const search = async () => {
+        searched = true;
+        if (!entry.automatic || !entry.origin) return [];
+        try {
+          const items = await deps.discover(`${entry.origin}/`, { signal: controller.signal });
+          if (!current()) throw new Error('Icon resolution cancelled');
+          return items.filter(item => item.kind !== 'logo').flatMap(item => {
+            const url = safeURL(item.url);
+            if (!url || isLegacyProvider(url)) return [];
+            discovered.add(url.href);
+            return [url.href];
+          });
+        } catch (cause) {
+          if (!current()) throw new Error('Icon resolution cancelled');
+          lastError = cause;
+          return [];
+        }
+      };
+      if (entry.forceRequested && entry.automatic) queue.unshift(...await search());
+      const tried = new Set<string>();
+      for (let index = 0; index < queue.length; index++) {
+        const source = queue[index];
+        if (tried.has(source)) continue;
+        tried.add(source);
         try {
           const reusable = !entry.forceRequested && [...entries.values()].find(other =>
             other !== entry && other.record?.source === source && !due(other))?.record;
@@ -164,7 +190,7 @@ export function createSiteIconService(deps: Dependencies) {
             if (!current()) throw new Error('Icon resolution cancelled');
             return;
           }
-          const sourceKey = JSON.stringify([enabled, source]);
+          const sourceKey = source;
           let load = sourceLoads.get(sourceKey);
           if (!load) {
             load = deps.load(source, controller.signal);
@@ -178,7 +204,8 @@ export function createSiteIconService(deps: Dependencies) {
           if (!current()) throw new Error('Icon resolution cancelled');
           if (result.blob && result.blob.size > MAX_IMAGE_BYTES) throw new Error('Icon exceeds byte limit');
           const record: SiteIconRecord = {
-            key: entry.key, source, blob: result.blob, updatedAt: deps.now(), accessedAt: deps.now(),
+            key: entry.key, source, blob: result.blob, discovered: discovered.has(source),
+            updatedAt: deps.now(), accessedAt: deps.now(),
           };
           showRecord(entry, record);
           await persist(record, epoch, controller.signal);
@@ -187,6 +214,7 @@ export function createSiteIconService(deps: Dependencies) {
         } catch (error) {
           if (!current()) throw new Error('Icon resolution cancelled');
           lastError = error;
+          if (index === queue.length - 1 && !searched && entry.automatic) queue.push(...await search());
         }
       }
       const record: SiteIconRecord = {
@@ -220,8 +248,8 @@ export function createSiteIconService(deps: Dependencies) {
   }
   return {
     peekSiteIcon(request: SiteIconRequest): SiteIconState {
-      const { sources, userSource } = candidates(request, enabled);
-      return entries.get(JSON.stringify([enabled, sources, userSource ?? null]))?.state ??
+      const { sources, userSource } = candidates(request);
+      return entries.get(JSON.stringify([false, sources, userSource ?? null]))?.state ??
         (sources.length ? LOADING : FALLBACK);
     },
     watchSiteIcon(request: SiteIconRequest, listener: (state: SiteIconState) => void) {
@@ -252,26 +280,6 @@ export function createSiteIconService(deps: Dependencies) {
         emit(entry, entry.sources.length ? LOADING : FALLBACK);
         void resolve(entry).catch(() => {});
       }
-    },
-    getThirdPartyIconsEnabled: () => enabled,
-    setThirdPartyIconsEnabled(value: boolean) {
-      if (value === enabled) return;
-      deps.preferences.setItem(PREFERENCE_KEY, String(value));
-      enabled = value;
-      invalidate(LOADING);
-      for (const watcher of watchers) {
-        watcher.entry.watchers.delete(watcher);
-        const entry = entryFor(watcher.request);
-        watcher.entry = entry;
-        entry.watchers.add(watcher);
-        watcher.listener(entry.state);
-        void resolve(entry).catch(() => {});
-      }
-      for (const listener of preferenceListeners) listener();
-    },
-    subscribeIconPreferences(listener: () => void) {
-      preferenceListeners.add(listener);
-      return () => { preferenceListeners.delete(listener); };
     },
   };
 }
@@ -472,16 +480,16 @@ const browserLoad = createSiteIconLoader({
 });
 export const validateSiteIconSource = (source: string, signal: AbortSignal): Promise<{ blob?: Blob }> =>
   browserLoad(source, signal);
+export const discoverValidatedSiteIcons = (url: string, options: {
+  signal: AbortSignal; onCandidate?: (candidate: SiteIconCandidate) => void;
+}): Promise<SiteIconCandidate[]> => discoverSiteIcons(url, { ...options, validateCandidate: validateSiteIconSource });
 let singleton: ReturnType<typeof createSiteIconService> | undefined;
 function service() {
   return singleton ??= createSiteIconService({
     now: Date.now,
     load: browserLoad,
+    discover: discoverValidatedSiteIcons,
     persistence: createSiteIconPersistence(),
-    preferences: {
-      getItem: key => globalThis.localStorage.getItem(key),
-      setItem: (key, value) => globalThis.localStorage.setItem(key, value),
-    },
     createObjectURL: blob => URL.createObjectURL(blob),
     revokeObjectURL: url => URL.revokeObjectURL(url),
   });
@@ -491,6 +499,3 @@ export const watchSiteIcon = (request: SiteIconRequest, listener: (state: SiteIc
   service().watchSiteIcon(request, listener);
 export const refreshSiteIcon = (request: SiteIconRequest): Promise<void> => service().refreshSiteIcon(request);
 export const clearSiteIconCache = (): Promise<void> => service().clearSiteIconCache();
-export const getThirdPartyIconsEnabled = (): boolean => service().getThirdPartyIconsEnabled();
-export const setThirdPartyIconsEnabled = (enabled: boolean): void => service().setThirdPartyIconsEnabled(enabled);
-export const subscribeIconPreferences = (listener: () => void): (() => void) => service().subscribeIconPreferences(listener);

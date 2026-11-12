@@ -45,10 +45,13 @@ function harness() {
       if (id === 'react') return hooks;
       if (id.endsWith('/site-icon-discovery')) return {
         rankSiteIconCandidates: (items: unknown[]) => items,
-        discoverSiteIcons(url: string, options: unknown) {
+      };
+      if (id.endsWith('/site-icons')) return {
+        discoverValidatedSiteIcons(url: string, options: unknown) {
           searches.push({ url, options });
           return new Promise(() => {});
         },
+        validateSiteIconSource: async () => ({}),
       };
       return require(id);
     }, module, module.exports,

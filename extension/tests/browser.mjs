@@ -287,7 +287,7 @@ try {
   assert.equal(await page.locator('img[src*="/_favicon/"]').count(), 0);
   assert.ok(
     !remoteRequests.some((request) => request.url.includes('/s2/favicons')),
-    'Google icon provider remains off by default',
+    'No automatic Google icon provider requests',
   );
   assert.equal(
     await page.evaluate(async () => (await globalThis.chrome.storage.local.get('jigeqiu-extension-state-v1'))['jigeqiu-extension-state-v1'].data.jipage_library_v2),
@@ -331,7 +331,7 @@ try {
     return Promise.all(
       [
         'brand/logo-a2-equator.png',
-        'wallpapers/cyan-lake-desktop.webp',
+        'wallpapers/snow-mountain-desktop.webp',
         'icons/icon-128.png',
       ].map(async (name) => {
         const response = await fetch(base + name);

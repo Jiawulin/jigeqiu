@@ -8,7 +8,7 @@ let browser;
 try {
   await server.listen();
   browser = await chromium.launch({ headless: true });
-  const context = await browser.newContext({ viewport: { width: 1280, height: 1000 } });
+  const context = await browser.newContext({ viewport: { width: 1280, height: 1000 }, locale: 'zh-CN' });
   context.setDefaultTimeout(15000);
   const page = await context.newPage();
   const errors = [];
@@ -29,7 +29,15 @@ try {
     const root = url.pathname === '/';
     if (root && url.hostname === 'slow.example.test') await new Promise(resolve => setTimeout(resolve, 1500));
     let body, mime = 'image/png';
-    if (root && url.hostname === 'icons.example.test') {
+    if (root && url.hostname === 'svg.example.test') {
+      mime = 'text/html';
+      body = Buffer.from('<link rel="icon" type="image/svg+xml" href="/brand/tianmu-viewer.svg">').toString('base64');
+    } else if (url.pathname === '/brand/tianmu-viewer.svg') {
+      mime = 'image/svg+xml';
+      body = Buffer.from('<svg xmlns="http://www.w3.org/2000/svg" width="512" height="512"><path fill="#07866c" d="M0 0h512v512H0z"/></svg>').toString('base64');
+    } else if (url.hostname === 'svg.example.test') {
+      body = undefined;
+    } else if (root && url.hostname === 'icons.example.test') {
       mime = 'text/html';
       body = Buffer.from(`<script>window.iconInjected=true</script>
         <link rel="icon" href="/static/img/logo.png">
@@ -66,7 +74,7 @@ try {
   const dialog = page.getByRole('dialog');
   const picker = dialog.getByRole('group', { name: '网站图标', exact: true });
   const library = () => page.evaluate(() => JSON.parse(localStorage.getItem('jipage_library_v2')).bookmarks);
-  await page.getByTitle('添加新网址到桌面 (⌘N)').first().click();
+  await page.getByTitle('添加收藏', { exact: true }).first().click();
   await dialog.getByLabel('网址 URL', { exact: true }).fill('https://icons.example.test/private?token=secret');
   await dialog.getByLabel('网站名称', { exact: true }).fill('中文工具');
   await picker.getByRole('button', { name: /网站图标/ }).click();
@@ -101,6 +109,10 @@ try {
     { x: center.x + 10, y: Math.min(center.y + 10, 800) }), true);
   await page.screenshot({ path: 'test-results/screenshots/icon-picker-mobile.png', fullPage: true });
   assert.equal(await page.evaluate(() => document.documentElement.scrollWidth > innerWidth), false);
+  await page.setViewportSize({ width: 320, height: 844 });
+  await online.scrollIntoViewIfNeeded();
+  assert.equal(await page.evaluate(() => document.documentElement.scrollWidth > innerWidth), false);
+  await page.screenshot({ path: 'test-results/screenshots/icon-picker-mobile-320.png', fullPage: true });
   await page.setViewportSize({ width: 1280, height: 1000 });
   await dialog.getByRole('button', { name: '添加收藏', exact: true }).click();
   await dialog.waitFor({ state: 'hidden' });
@@ -162,6 +174,30 @@ try {
   await dialog.getByRole('button', { name: '保存更改' }).click();
   await dialog.waitFor({ state: 'hidden' });
   assert.equal((await library())[1].icon, undefined);
+  await page.getByRole('button', { name: '添加收藏到此目录', exact: true }).click();
+  await dialog.getByLabel('网址 URL', { exact: true }).fill('https://svg.example.test/private');
+  await dialog.getByLabel('网站名称', { exact: true }).fill('SVG declared');
+  await picker.getByRole('button', { name: /网站图标/ }).click();
+  await picker.getByRole('tabpanel', { name: '在线候选', exact: true })
+    .locator('img[src="https://svg.example.test/brand/tianmu-viewer.svg"]').waitFor();
+  await picker.getByRole('status').filter({ hasText: /^找到/ }).waitFor();
+  await dialog.getByRole('button', { name: '添加收藏', exact: true }).click();
+  await dialog.waitFor({ state: 'hidden' });
+  const svgBookmark = (await library()).find(item => item.title === 'SVG declared');
+  assert.equal(svgBookmark.icon, 'https://svg.example.test/brand/tianmu-viewer.svg');
+  assert.equal(svgBookmark.iconMode, 'auto');
+  await page.getByRole('banner').getByRole('button', { name: '桌面', exact: true }).click();
+  await page.getByTitle('启动台 · 所有应用与收藏 (桌面上滑亦可展开)').click();
+  const launchpad = page.getByRole('dialog', { name: '启动台', exact: true });
+  const svgItem = launchpad.locator(`[data-launchpad-bookmark="${svgBookmark.id}"]`);
+  const rootsBefore = requests.filter(url => url === 'https://svg.example.test/').length;
+  await svgItem.click({ button: 'right' });
+  await launchpad.getByRole('menuitem', { name: '刷新网站图标', exact: true }).click();
+  await page.waitForFunction(() => !document.querySelector('[data-icon-state="loading"]'));
+  await svgItem.locator('img[src="https://svg.example.test/brand/tianmu-viewer.svg"]').waitFor();
+  assert.ok(requests.filter(url => url === 'https://svg.example.test/').length > rootsBefore,
+    'Launchpad refresh uses the same declared SVG discovery as the form');
+  assert.equal(requests.some(url => /google\.com\/s2\/|svg\.example\.test\/private/.test(url)), false);
   assert.deepEqual(errors, []);
   console.log('PASS: declared/manifest and common-path frontend candidates, actual dimensions and ranking, inert HTML/privacy, manual choice/reload, custom URL validation, text mode, CORS fallback, add/edit integration and desktop/mobile screenshots');
 } finally {

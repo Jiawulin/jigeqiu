@@ -8,7 +8,6 @@ export type SiteIconCandidate = {
 };
 type DiscoveryOptions = {
   signal: AbortSignal;
-  thirdParty: boolean;
   onCandidate?: (candidate: SiteIconCandidate) => void;
   validateCandidate?: (source: string, signal: AbortSignal) => Promise<unknown>;
 };
@@ -188,11 +187,6 @@ export function createSiteIconDiscovery(deps: Dependencies) {
     };
     for (const path of COMMON_PATHS) {
       add({ url: `${page.origin}/${path}`, kind: path.startsWith('apple-') ? 'touch' : 'icon' });
-    }
-    const host = page.hostname.replace(/\.$/, '');
-    if (options.thirdParty && host.includes('.') && !host.includes(':') && !/^[\d.]+$/.test(host) &&
-        !/(^|\.)(localhost|localdomain|local|internal|lan|home|arpa|onion|invalid)$/.test(host)) {
-      add({ url: `https://www.google.com/s2/favicons?domain=${encodeURIComponent(host)}&sz=128`, kind: 'icon' });
     }
     try {
       const html = await readText(deps, `${page.origin}/`, 256 * 1024, options.signal);

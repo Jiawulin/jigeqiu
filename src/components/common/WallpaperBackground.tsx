@@ -1,5 +1,5 @@
 import React, { useEffect, useLayoutEffect, useState } from 'react';
-import { readWallpaper, visibleWallpaper } from '../../services/custom-wallpaper';
+import { readWallpaper, subscribeWallpaperChange, visibleWallpaper } from '../../services/custom-wallpaper';
 import { WallpaperPreset, AppearanceMode } from '../../types';
 import './wallpaper.css';
 
@@ -17,18 +17,21 @@ export const WallpaperBackground: React.FC<WallpaperBackgroundProps> = ({
   customWallpaperId,
 }) => {
   const [custom, setCustom] = useState<{ id: string; url: string } | null>(null);
+  const [revision, setRevision] = useState(0);
+  useEffect(() => subscribeWallpaperChange(() => setRevision(value => value + 1)), []);
   useEffect(() => {
     let cancelled = false;
     let url: string | undefined;
     if (preset === 'custom' && customWallpaperId) {
       void readWallpaper(customWallpaperId).then(blob => {
-        if (cancelled || !blob) return;
+        if (cancelled) return;
+        if (!blob) { setCustom(null); return; }
         url = URL.createObjectURL(blob);
         setCustom({ id: customWallpaperId, url });
-      }).catch(() => { /* Retain the built-in background when browser data is unavailable. */ });
+      }).catch(() => { if (!cancelled) setCustom(null); });
     }
     return () => { cancelled = true; if (url) URL.revokeObjectURL(url); };
-  }, [preset, customWallpaperId]);
+  }, [preset, customWallpaperId, revision]);
   const customUrl = preset === 'custom' && custom && custom.id === customWallpaperId ? custom.url : undefined;
   const isDark = appearance === 'dark-glass';
   const isReduced = appearance === 'reduced-transparency';

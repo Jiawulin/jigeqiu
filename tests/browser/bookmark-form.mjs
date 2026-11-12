@@ -12,7 +12,7 @@ let browser;
 try {
   if (!useDist) await server.listen();
   browser = await chromium.launch({ headless: true });
-  const context = await browser.newContext({ viewport: { width: 1280, height: 1000 } });
+  const context = await browser.newContext({ viewport: { width: 1280, height: 1000 }, locale: 'zh-CN' });
   await context.route('https://**/*', route => route.abort());
   const page = await context.newPage();
   page.setDefaultTimeout(12000);

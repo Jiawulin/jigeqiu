@@ -13,6 +13,7 @@ import {
   DesktopAppWindow,
 } from './types';
 import { storage } from './services/storage';
+import { subscribeWallpaperChange } from './services/custom-wallpaper';
 import { useHashRoute } from './hooks/useHashRoute';
 import { WallpaperBackground } from './components/common/WallpaperBackground';
 import { Toast, ToastMessage } from './components/common/Toast';
@@ -72,7 +73,12 @@ export default function PrototypeApp() {
   useEffect(() => {
     const check = () => {
       const language = readUserLocale();
-      setSettings(current => current.language === language ? current : { ...current, language });
+      try {
+        const next = storage.getUserSettings();
+        setSettings(current => current.language === language
+          && current.wallpaperPreset === next.wallpaperPreset && current.customWallpaperId === next.customWallpaperId
+          ? current : { ...current, language, wallpaperPreset: next.wallpaperPreset, customWallpaperId: next.customWallpaperId });
+      } catch { /* Keep the rendered background if preferences cannot be read. */ }
       try { setLibraryChanged(storage.hasLibraryChanges()); }
       catch { setLibraryChanged(true); }
     };
@@ -83,12 +89,14 @@ export default function PrototypeApp() {
     window.addEventListener('storage', onStorage);
     window.addEventListener('application-storage-change', check);
     window.addEventListener('focus', check);
+    const unsubscribeWallpaper = subscribeWallpaperChange(check);
     document.addEventListener('visibilitychange', onVisible);
     check();
     return () => {
       window.removeEventListener('storage', onStorage);
       window.removeEventListener('application-storage-change', check);
       window.removeEventListener('focus', check);
+      unsubscribeWallpaper();
       document.removeEventListener('visibilitychange', onVisible);
     };
   }, []);
@@ -550,12 +558,16 @@ export default function PrototypeApp() {
   };
 
   // Settings update
-  const handleUpdateSettings = async (updates: Partial<UserSettings>): Promise<boolean> => {
+  const handleUpdateSettings = async (updates: Partial<UserSettings>, signal?: AbortSignal): Promise<boolean> => {
     try {
-      const next = await storage.mutate(() => storage.saveUserSettings(updates));
+      const next = await storage.mutate(() => {
+        signal?.throwIfAborted();
+        return storage.saveUserSettings(updates);
+      });
       setSettings(next);
       return true;
     } catch (cause) {
+      if (signal?.aborted) return false;
       showToast(preferenceSaveError(cause, settings.language,
         updates.dockBookmarkIds !== undefined ? 'library' : 'settings'));
       return false;

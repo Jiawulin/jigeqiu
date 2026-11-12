@@ -1,8 +1,8 @@
 import assert from 'node:assert/strict';
-import { readFileSync, statSync } from 'node:fs';
+import { existsSync, readFileSync, statSync } from 'node:fs';
 import test from 'node:test';
 
-const presets = ['cyan-lake', 'snow-mountain'];
+const presets = ['snow-mountain', 'misty-mountains', 'corner-tower', 'green-lake'];
 const css = readFileSync(new URL('../../src/components/common/wallpaper.css', import.meta.url), 'utf8');
 
 test('each wallpaper has high-resolution desktop and portrait assets with lightweight thumbnails', () => {
@@ -26,5 +26,14 @@ test('wallpaper credits include every distributed source rather than using remot
   const credits = readFileSync(new URL('../../public/wallpapers/CREDITS.md', import.meta.url), 'utf8');
   for (const preset of presets) assert.ok(credits.includes(preset));
   assert.ok(credits.includes('https://www.pexels.com/license/'));
+  assert.ok(credits.includes('https://unsplash.com/license'));
+  for (const id of ['gdE-5Oui1Y0', 'L7B3VHgOoVM', 'b_BCfhShIr0']) assert.ok(credits.includes(id));
   assert.doesNotMatch(css, /url\(["']?https?:/);
+});
+
+test('removed lake is not distributed or requested by wallpaper styles', () => {
+  assert.doesNotMatch(css, /cyan-lake/);
+  for (const suffix of ['desktop', 'mobile', 'thumb']) {
+    assert.equal(existsSync(new URL(`../../public/wallpapers/cyan-lake-${suffix}.webp`, import.meta.url)), false);
+  }
 });
