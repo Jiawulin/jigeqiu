@@ -885,7 +885,7 @@ export const UserCenterView: React.FC<UserCenterViewProps> = ({
                 <div className="relative flex-1 max-w-sm">
                   <Search size={14} className="absolute left-3 top-2.5 text-slate-400" />
                   <input
-                    type="text"
+                    type="search"
                     placeholder={t('managerBookmarkSearch')}
                     aria-label={t('managerBookmarkSearch')}
                     value={bookmarkSearch}

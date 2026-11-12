@@ -108,9 +108,11 @@ export function getDomainColor(domain: string): string {
 }
 
 export class StorageManager {
+  private pendingMutations = 0;
   async mutate<T>(action: () => T): Promise<T> {
     // Business methods update optimistic baselines while staging a transaction.
     let baselines: (string | undefined)[] | undefined;
+    this.pendingMutations++;
     try { return await mutateStorage(() => {
       baselines = [this.pageBase, this.bookmarkBase, this.folderBase, this.desktopBase,
         this.collectionBase, this.trashBase, this.folderTrashBase, this.dockBase];
@@ -120,6 +122,11 @@ export class StorageManager {
       if (baselines) [this.pageBase, this.bookmarkBase, this.folderBase, this.desktopBase,
         this.collectionBase, this.trashBase, this.folderTrashBase, this.dockBase] = baselines;
       throw cause;
+    } finally {
+      this.pendingMutations--;
+      if (!this.pendingMutations && hasApplicationStorageDriver() && typeof window !== 'undefined') {
+        window.dispatchEvent(new Event('application-library-settled'));
+      }
     }
   }
   private pageBase: string | undefined;
@@ -147,6 +154,29 @@ export class StorageManager {
 
   hasLibraryChanges(): boolean {
     return this.pageBase !== undefined && this.pageBase !== this.sourceRaw();
+  }
+
+  /** Accept a validated read-only snapshot only when no editor owns the old baseline. */
+  acceptLibrarySnapshot() {
+    if (this.pendingMutations) throw new Error('CONFLICT');
+    const source = this.sourceRaw();
+    const reader = new StorageManager();
+    const snapshot = {
+      bookmarks: reader.getBookmarks(), folders: reader.getFolders(), collections: reader.getCollections(),
+      bookmarkTrash: reader.getBookmarkTrash(), folderTrash: reader.getFolderTrash(),
+      settings: reader.getUserSettings(), desktopLayout: reader.getDesktopLayout(),
+      searchEngines: reader.getSearchEngines(),
+    };
+    if (this.sourceRaw() !== source) throw new Error('CONFLICT');
+    this.pageBase = reader.pageBase;
+    this.bookmarkBase = reader.bookmarkBase;
+    this.folderBase = reader.folderBase;
+    this.desktopBase = reader.desktopBase;
+    this.collectionBase = reader.collectionBase;
+    this.trashBase = reader.trashBase;
+    this.folderTrashBase = reader.folderTrashBase;
+    this.dockBase = reader.dockBase;
+    return snapshot;
   }
 
   private envelope(raw: string | null): Record<string, unknown> | null {

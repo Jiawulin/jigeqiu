@@ -1,5 +1,6 @@
 import { useEffect, useRef, useState, type RefObject } from 'react';
 import { advanceLaunchpadInertia, createLaunchpadDrag, launchpadLetterAt } from './launchpad-gestures';
+import { traceLaunchpadGesture as trace } from './launchpad-gesture-debug';
 
 export function useLaunchpadGestures(
   root: RefObject<HTMLDivElement | null>, scroll: RefObject<HTMLDivElement | null>,
@@ -47,7 +48,11 @@ export function useLaunchpadGestures(
       if (pointer) blockedClick = true;
       release();
     };
-    interrupt.current = cancel;
+    const cancelled = (reason: 'menu' | 'wheel' | 'key' | 'blur' | 'pointercancel' | 'lostpointercapture' | 'cleanup' | 'additional-pointer') => {
+      trace('cancel', { reason, top: container.scrollTop, dragging: pointer?.drag.dragging });
+      cancel();
+    };
+    interrupt.current = () => cancelled('menu');
     const locate = (nav: HTMLElement, y: number) => {
       const cells = [...nav.querySelectorAll<HTMLElement>('[data-launchpad-letter]')].map(element => {
         const rect = element.getBoundingClientRect();
@@ -60,9 +65,12 @@ export function useLaunchpadGestures(
       }
     };
     const down = (event: PointerEvent) => {
+      trace('down', { x: event.clientX, y: event.clientY, buttons: event.buttons,
+        mouse: event.pointerType === 'mouse', top: container.scrollTop,
+        delay: performance.now() - event.timeStamp }, event.timeStamp);
       const wasMoving = frame !== 0 || (event.pointerType === 'touch' && performance.now() - lastScroll < 120);
       stopInertia();
-      if (pointer) { cancel(); return; }
+      if (pointer) { cancelled('additional-pointer'); return; }
       if (!event.isPrimary) return;
       if (event.button !== 0) { blockedClick = false; return; }
       blockedClick = false;
@@ -103,6 +111,10 @@ export function useLaunchpadGestures(
       const samples = event.getCoalescedEvents?.() ?? [];
       for (const sample of samples) record(sample);
       record(event);
+      trace('move', { x: event.clientX, y: event.clientY, buttons: event.buttons,
+        top: active.top, max, dragging: active.drag.dragging,
+        velocity: active.drag.velocity(event.timeStamp), captured: shell.hasPointerCapture(event.pointerId),
+        delay: performance.now() - event.timeStamp }, event.timeStamp);
       if (!pointer.drag.dragging) return;
       blockedClick = true;
       if (pointer.type === 'mouse') {
@@ -116,7 +128,9 @@ export function useLaunchpadGestures(
       }
     };
     const inertia = (velocity: number) => {
-      if (matchMedia('(prefers-reduced-motion: reduce)').matches) return;
+      const reduced = matchMedia('(prefers-reduced-motion: reduce)').matches;
+      trace('inertia', { velocity, reduced, top: container.scrollTop });
+      if (reduced) return;
       let last = performance.now();
       let position = container.scrollTop;
       const tick = (now: number) => {
@@ -127,6 +141,7 @@ export function useLaunchpadGestures(
         velocity = next.velocity;
         last = now;
         frame = velocity ? requestAnimationFrame(tick) : 0;
+        if (!velocity) trace('end', { top: position, velocity });
       };
       if (Math.abs(velocity) >= 0.05) frame = requestAnimationFrame(tick);
     };
@@ -135,6 +150,9 @@ export function useLaunchpadGestures(
       move(event, false);
       flushDrag();
       const velocity = pointer.type === 'mouse' && !pointer.alphabet ? pointer.drag.releaseVelocity(event.timeStamp) : 0;
+      trace('release', { velocity, dragging: pointer.drag.dragging, top: container.scrollTop,
+        buttons: event.buttons, mouse: pointer.type === 'mouse',
+        delay: performance.now() - event.timeStamp }, event.timeStamp);
       if (pointer.alphabet && pointer.letter) letterCallback.current(pointer.letter, true);
       release();
       inertia(velocity);
@@ -142,10 +160,17 @@ export function useLaunchpadGestures(
     const suppress = (event: MouseEvent) => {
       if (blockedClick && event.detail !== 0) { event.preventDefault(); event.stopImmediatePropagation(); }
     };
-    const lost = (event: PointerEvent) => { if (pointer?.id === event.pointerId) cancel(); };
-    const key = () => { cancel(); };
+    const lost = (event: PointerEvent) => {
+      if (pointer?.id === event.pointerId) cancelled(event.type === 'pointercancel' ? 'pointercancel' : 'lostpointercapture');
+    };
+    const key = () => { cancelled('key'); };
+    const wheel = () => { cancelled('wheel'); };
+    const blur = () => { cancelled('blur'); };
     const dragstart = (event: DragEvent) => { if (pointer) event.preventDefault(); };
-    const scrolled = () => { lastScroll = performance.now(); };
+    const scrolled = () => {
+      lastScroll = performance.now();
+      trace('scroll', { top: container.scrollTop });
+    };
     const contextmenu = (event: MouseEvent) => {
       if (blockedClick) { event.preventDefault(); event.stopImmediatePropagation(); }
     };
@@ -158,11 +183,11 @@ export function useLaunchpadGestures(
     shell.addEventListener('click', suppress, true);
     shell.addEventListener('contextmenu', contextmenu, true);
     shell.addEventListener('dragstart', dragstart);
-    shell.addEventListener('wheel', cancel, { passive: true });
+    shell.addEventListener('wheel', wheel, { passive: true });
     document.addEventListener('keydown', key, true);
-    window.addEventListener('blur', cancel);
+    window.addEventListener('blur', blur);
     return () => {
-      cancel();
+      cancelled('cleanup');
       interrupt.current = null;
       shell.removeEventListener('pointerdown', down, true);
       container.removeEventListener('scroll', scrolled);
@@ -173,9 +198,9 @@ export function useLaunchpadGestures(
       shell.removeEventListener('click', suppress, true);
       shell.removeEventListener('contextmenu', contextmenu, true);
       shell.removeEventListener('dragstart', dragstart);
-      shell.removeEventListener('wheel', cancel);
+      shell.removeEventListener('wheel', wheel);
       document.removeEventListener('keydown', key, true);
-      window.removeEventListener('blur', cancel);
+      window.removeEventListener('blur', blur);
     };
   }, [enabled, query, root, scroll]);
   return preview;

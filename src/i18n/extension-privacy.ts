@@ -14,7 +14,7 @@ const privacySectionsZh = [
   },
   {
     title: '浏览器权限与新标签页',
-    text: '扩展将新标签页替换为记个球工作台，申请 storage 权限以保存本地数据。不申请 favicon、浏览器原生书签、浏览历史、标签页管理或默认的所有网站访问权限，不注入其他网站页面。清单保留 HTTPS 站点可选权限声明，但当前不主动申请，也不提供授权按钮；已有站点权限可在浏览器扩展管理中撤销。这里的“知晓并继续”仅是应用内告知确认，不会授予网站访问权限。',
+    text: '扩展将新标签页替换为记个球工作台，申请 storage 权限以保存本地数据，contextMenus 权限以提供“收藏到记个球”右键菜单，activeTab 权限仅在你点击菜单或使用扩展快捷键时读取当前网页的网址和标题。待收藏内容临时保存在 chrome.storage.session 中，关闭收藏弹窗或结束浏览器会话后清除；确认表单才写入收藏库。不接管浏览器原生收藏快捷键或收藏星标，不申请 favicon、浏览器原生书签、浏览历史、tabs 或默认的所有网站访问权限，不注入其他网站页面。清单保留 HTTPS 站点可选权限声明，但当前不主动申请，也不提供授权按钮；已有站点权限可在浏览器扩展管理中撤销。这里的“知晓并继续”仅是应用内告知确认，不会授予网站访问权限。',
   },
   {
     title: '自动网站图标',
@@ -65,7 +65,7 @@ const privacySectionsEn = [
   },
   {
     title: 'Browser permissions and new tabs',
-    text: 'The extension replaces new tabs with the JIGEQIU workbench and requests storage permission for local data. It does not request favicon, native bookmarks, browsing history, tab management or default access to all sites, and does not inject content into other websites. The manifest declares optional HTTPS site permissions, but the extension currently neither requests them nor provides an authorization button. Existing site permissions can be revoked in browser extension settings. "Acknowledge and continue" only acknowledges this in-app notice; it does not grant website access.',
+    text: 'The extension replaces new tabs with the JIGEQIU workbench. It requests storage for local data, contextMenus for "Save to JIGEQIU", and activeTab to read the current page URL and title only when you invoke the menu or extension shortcut. Pending captures stay temporarily in chrome.storage.session and are cleared when the capture window closes or the browser session ends. Only confirming the form writes a bookmark. The extension does not override native bookmarking shortcuts or the bookmark star, request favicon, native bookmarks, browsing history, tabs or default access to all sites, or inject content into other websites. The manifest declares optional HTTPS site permissions, but the extension currently neither requests them nor provides an authorization button. Existing site permissions can be revoked in browser extension settings. "Acknowledge and continue" only acknowledges this in-app notice; it does not grant website access.',
   },
   {
     title: 'Automatic site icons',

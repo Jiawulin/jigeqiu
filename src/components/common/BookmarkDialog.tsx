@@ -21,6 +21,7 @@ export interface BookmarkDialogProps {
   folders: Folder[];
   existingBookmarks: Bookmark[];
   initialUrl?: string;
+  initialTitle?: string;
   initialFolderId?: string;
   defaultPinToDesktop?: boolean;
   desktopFolderName?: string;
@@ -45,14 +46,14 @@ export function BookmarkDialog(props: BookmarkDialogProps) {
 }
 
 function BookmarkDialogSession({
-  onClose, bookmark, folders, existingBookmarks, initialUrl = '', initialFolderId,
+  onClose, bookmark, folders, existingBookmarks, initialUrl = '', initialTitle, initialFolderId,
   defaultPinToDesktop = false, desktopFolderName, language, onboarding,
   onSave, onCreateFolder, onOpenExisting, onEditExisting,
 }: BookmarkDialogProps) {
   const t = createTranslator(language);
   const [url, setUrl] = useState(bookmark?.url ?? initialUrl);
-  const [title, setTitle] = useState(bookmark?.title ?? defaultBookmarkTitle(initialUrl));
-  const titleEdited = useRef(Boolean(bookmark));
+  const [title, setTitle] = useState(bookmark?.title ?? (initialTitle?.trim() || defaultBookmarkTitle(initialUrl)));
+  const titleEdited = useRef(Boolean(bookmark || initialTitle?.trim()));
   const [folderId, setFolderId] = useState(bookmark ? bookmark.folderId : initialFolderId);
   const [keywords, setKeywords] = useState(bookmark?.keywords ?? []);
   const [icon, setIcon] = useState<SiteIconChoice>({
@@ -167,6 +168,7 @@ function BookmarkDialogSession({
   }
 
   return <Modal isOpen onClose={close} maxWidth="lg" contained showCloseButton={!busy}
+    closeLabel={`${t('extensionCaptureClose')} (Esc)`}
     title={t(bookmark ? 'editBookmark' : 'addBookmark')}>
     <form data-bookmark-form onSubmit={submit} aria-busy={busy} className="min-w-0 text-slate-800 dark:text-slate-100">
       {onboarding?.task === 'add' && <TaskHint language={language}

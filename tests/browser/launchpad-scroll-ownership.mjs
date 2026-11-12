@@ -101,6 +101,7 @@ try {
         await page.waitForTimeout(200);
         assert.equal(await position(), thumb, 'Container scrollbar position must not snap back to the alphabet target');
 
+        await page.evaluate(() => window.launchpadGestureDebug.start());
         await page.mouse.move(geometry.left + 2, geometry.top + geometry.height * 0.65);
         await page.mouse.down();
         for (let i = 1; i <= 8; i++) {
@@ -111,6 +112,19 @@ try {
         const release = await position();
         await page.waitForTimeout(600);
         assert.ok(await position() > release + 40, 'Content drag keeps inertia after alphabet and scrollbar interaction');
+        await scroll.hover();
+        await page.mouse.wheel(0, 10);
+        await page.waitForTimeout(40);
+        const diagnostic = await page.evaluate(() => window.launchpadGestureDebug.stop());
+        assert.ok(diagnostic.events.some(event => event.kind === 'release' && event.velocity > 0),
+          'Opt-in diagnostics capture the actual hook release velocity');
+        assert.ok(diagnostic.events.some(event => event.kind === 'inertia' && !event.reduced && event.velocity > 0));
+        assert.ok(diagnostic.events.some(event => event.kind === 'cancel' && event.reason === 'wheel'),
+          'Diagnostics distinguish wheel interruption from a rejected release');
+        assert.ok(diagnostic.events.every(event => !('target' in event) && !('url' in event)));
+        await page.mouse.move(geometry.left + 2, geometry.top + geometry.height * 0.65);
+        assert.equal((await page.evaluate(() => window.launchpadGestureDebug.read())).events.length,
+          diagnostic.events.length, 'Stopped diagnostics no longer collect events');
       }
       console.log(`PASS scroll ownership gutter=${gutter}`);
     } catch (error) {

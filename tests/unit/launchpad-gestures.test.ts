@@ -14,7 +14,7 @@ test('drag threshold distinguishes taps, horizontal motion and cancelled gesture
   assert.equal(drag.velocity(30), 0);
 });
 
-test('release speed uses recent movement, respects pauses and clamps flicks', () => {
+test('instantaneous speed uses recent movement, respects pauses and clamps flicks', () => {
   const drag = gestures.createLaunchpadDrag(0, 400, 0);
   drag.move(0, 300, 50);
   drag.move(0, 100, 100);
@@ -55,12 +55,12 @@ test('inertia preserves distance across frame rates and fractional positions', (
   }
 });
 
-test('release velocity follows reversal, rejects stationary holds and limits extreme spikes', () => {
+test('instantaneous velocity follows reversal, expires during holds and limits extreme spikes', () => {
   const reverse = gestures.createLaunchpadDrag(0, 400, 0);
   for (const [y, at] of [[300, 50], [280, 80], [300, 100], [340, 120]]) reverse.move(0, y, at);
   assert.ok(reverse.velocity(120) < -0.5, 'Release follows the final downward stroke');
   reverse.move(0, 340, 270);
-  assert.equal(reverse.velocity(270), 0, 'A deliberate hold before release must not fling');
+  assert.equal(reverse.velocity(270), 0, 'Instantaneous speed expires independently of retained release intent');
   const flick = gestures.createLaunchpadDrag(0, 500, 0);
   flick.move(0, 0, 10);
   assert.equal(flick.velocity(10), 8);
@@ -100,7 +100,7 @@ test('alphabet hit testing follows real cell centers and clamps beyond ends', ()
   assert.equal(gestures.launchpadLetterAt(10, []), null);
 });
 
-test('release tolerates a short pause and fades smoothly before a deliberate hold', () => {
+test('instantaneous speed fades during a pause independently of retained release velocity', () => {
   const speeds = [0, 30, 60, 90, 100, 150].map(pause => {
     const drag = gestures.createLaunchpadDrag(0, 500, 0);
     for (let i = 1; i <= 8; i++) drag.move(0, 500 - i * 20, i * 16);
@@ -169,19 +169,21 @@ test('short flicks use desktop distance and speed intent, while tiny drags do no
   const flick = gestures.createLaunchpadDrag(0, 500, 0);
   flick.move(0, 482, 40);
   assert.ok(flick.releaseVelocity(45) >= 0.65);
-  assert.equal(flick.releaseVelocity(110), 0, 'A paused short flick must not borrow distance intent');
+  assert.equal(flick.releaseVelocity(740), flick.releaseVelocity(45),
+    'A delayed release preserves a short flick without borrowing distance intent');
   const tiny = gestures.createLaunchpadDrag(0, 500, 0);
   tiny.move(0, 488, 10);
   assert.equal(tiny.releaseVelocity(15), 0);
 });
 
-test('committed release tolerates a natural slowdown and fades out for a deliberate hold', () => {
+test('committed release retains final intent through a stationary release delay', () => {
   const drag = gestures.createLaunchpadDrag(0, 500, 0);
   for (let i = 1; i <= 8; i++) drag.move(0, 500 - i * 10, i * 25);
   for (let i = 1; i <= 5; i++) drag.move(0, 420 - i, 200 + i * 20);
   assert.ok(drag.releaseVelocity(320) >= 0.65, 'Slow final pixels do not erase deliberate travel');
-  assert.ok(drag.releaseVelocity(420) > 0.3, 'A 120ms release pause retains visible momentum');
-  assert.equal(drag.releaseVelocity(500), 0);
+  assert.equal(drag.releaseVelocity(420), drag.releaseVelocity(320));
+  assert.equal(drag.releaseVelocity(1000), drag.releaseVelocity(320),
+    'Like tmviewer, stationary release latency does not erase the last stroke');
   drag.move(0, 414, 550);
   assert.equal(drag.releaseVelocity(555), 0, 'A tiny restart cannot revive the old committed drag');
 });
@@ -231,5 +233,65 @@ test('activation slop at either edge does not erase an inward slow drag', () => 
     }
     assert.equal(position, direction < 0 ? 28 : 972);
     assert.equal(drag.releaseVelocity(390), -direction * 0.65);
+  }
+});
+
+test('release hand retraction within drag slop retains committed inertia in either direction', () => {
+  for (const direction of [-1, 1]) {
+    for (const sampled of [false, true]) {
+      for (const retraction of [4, 6, 8]) {
+        const drag = gestures.createLaunchpadDrag(0, 500, 0);
+        for (let i = 1; i <= 8; i++) drag.move(0, 500 + direction * i * 20, i * 16);
+        drag.move(0, 500 + direction * (160 - retraction), 150, sampled);
+        assert.ok(drag.releaseVelocity(160) * -direction >= 0.65,
+          `${retraction}px ${sampled ? 'sampled' : 'release-only'} retraction must not discard a 160px stroke`);
+      }
+    }
+  }
+});
+
+test('slow initial events establish direction before the hold timeout at a boundary', () => {
+  const drag = gestures.createLaunchpadDrag(0, 666, 819);
+  let position = 6220;
+  const times = [888, 978, 1034, 1111, 1142, 1176, 1218, 1261, 1294, 1326, 1360, 1393];
+  for (const [index, time] of times.entries()) {
+    drag.move(0, 666 + (index + 1) * 3, time);
+    position = drag.scrollPosition(position, 6220);
+  }
+  assert.equal(position, 6192);
+  assert.ok(drag.releaseVelocity(1426) <= -0.65);
+});
+
+test('real three-finger traces retain the last stroke across 671-690ms release delays', () => {
+  const traces = [
+    { x: 1577.87109375, y: 310.73046875, at: 0, up: 794, samples: [
+      [1578.28515625, 288.91796875, 29], [1585.2890625, 193.3359375, 104],
+    ] },
+    { x: 1585.2890625, y: 193.3359375, at: 1179.4, up: 2002.1, samples: [
+      [1585.2890625, 184.63671875, 1199.8], [1587.125, 140.3046875, 1266.5],
+      [1587.125, 135.67578125, 1270.6], [1587.125, 114.06640625, 1303.9],
+      [1586.8828125, 109.453125, 1320.7], [1586.62890625, 101.1640625, 1331.4],
+    ] },
+  ];
+  for (const trace of traces) {
+    for (const direction of [-1, 1]) {
+      const drag = gestures.createLaunchpadDrag(trace.x, trace.y, trace.at);
+      let position = 1000;
+      for (const [x, y, at] of trace.samples) {
+        drag.move(x, trace.y + (y - trace.y) * direction, at);
+        position = drag.scrollPosition(position, 10000);
+      }
+      const last = trace.samples.at(-1)!;
+      const immediate = drag.releaseVelocity(last[2]);
+      // Real hook invokes move(..., false) for pointerup, including its unchanged coordinates.
+      drag.move(last[0], trace.y + (last[1] - trace.y) * direction, trace.up, false);
+      position = drag.scrollPosition(position, 10000);
+      assert.equal(drag.releaseVelocity(trace.up), immediate);
+      assert.ok(immediate * direction >= 0.65);
+      const next = gestures.advanceLaunchpadInertia(position, drag.releaseVelocity(trace.up), 500, 10000);
+      assert.ok((next.position - position) * direction > 80);
+      drag.cancel();
+      assert.equal(drag.releaseVelocity(trace.up + 1), 0, 'Cancellation still discards retained velocity');
+    }
   }
 });

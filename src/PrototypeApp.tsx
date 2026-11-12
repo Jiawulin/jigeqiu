@@ -1,4 +1,5 @@
 import React, { useState, useEffect } from 'react';
+import { useExtensionLibrarySync } from './hooks/useExtensionLibrarySync';
 import { readUserLocale } from './services/user-locale';
 import {
   Bookmark,
@@ -228,6 +229,23 @@ export default function PrototypeApp() {
   const overlaysOpen = isGuideOpen || isQuickAddOpen || !!bookmarkToEdit || !!activeFolderModal
     || !!activeDesktopFolder || isCalculatorOpen || isJsonFormatterOpen || isWordCounterOpen
     || appWindows.some(window => !window.isMinimized) || desktopInteraction || dockInteraction;
+  useExtensionLibrarySync({
+    blocked: Boolean(overlaysOpen || onboardingBlocking
+      || (route.page === 'management' && route.section === 'import-export')),
+    changed: () => storage.hasLibraryChanges(),
+    synchronize: () => {
+      const next = storage.acceptLibrarySnapshot();
+      setBookmarks(next.bookmarks);
+      setFolders(next.folders);
+      setCollections(next.collections);
+      setBookmarkTrash(next.bookmarkTrash);
+      setFolderTrash(next.folderTrash);
+      setSettings(next.settings);
+      setDesktopLayout(next.desktopLayout);
+      setSearchEngines(next.searchEngines);
+      setLibraryChanged(false);
+    },
+  });
   const taskContext = React.useMemo<OnboardingTaskContext | undefined>(() => onboarding.flow.phase === 'task' && onboarding.flow.task
     ? { task: onboarding.flow.task, onExit: onboarding.exit, onEvent: onboarding.onEvent } : undefined,
   [onboarding.flow.phase, onboarding.flow.task, onboarding.exit, onboarding.onEvent]);

@@ -61,6 +61,14 @@ function harness(overrides: Partial<BookmarkDialogProps> = {}) {
   };
 }
 type View = ReturnType<typeof harness>;
+test('captured page titles prefill the form with a fallback for empty titles', () => {
+  const view = harness({ initialTitle: ' Page title <example> ' });
+  assert.equal(view.nodes().find(node => node.props.id === 'bookmark-title')!.props.value, 'Page title <example>');
+  view.unmount();
+  const fallback = harness({ initialTitle: '  ' });
+  assert.ok(fallback.nodes().find(node => node.props.id === 'bookmark-title')!.props.value);
+  fallback.unmount();
+});
 function button(view: View, label: string) {
   const node = view.nodes().find(node => node.type === 'button' && content(node) === label);
   assert.ok(node, `Missing button: ${label}`);

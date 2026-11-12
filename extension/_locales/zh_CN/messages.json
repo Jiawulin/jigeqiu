@@ -1,4 +1,5 @@
 {
+  "captureCommand": { "message": "收藏当前网页到记个球" },
   "extensionName": {
     "message": "记个球 JIGEQIU"
   },

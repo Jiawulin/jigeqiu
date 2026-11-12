@@ -21,6 +21,12 @@ export async function buildExtension() {
   await build({
     configFile: fileURLToPath(new URL('../vite.config.ts', import.meta.url)),
   });
+  const { build: bundle } = await import('esbuild');
+  await bundle({
+    entryPoints: [path.join(projectRoot, 'extension/background.ts')],
+    outfile: path.join(extensionOutput, 'background.js'),
+    bundle: true, format: 'esm', platform: 'browser', target: 'chrome120',
+  });
   await cp(
     fileURLToPath(new URL('../_locales', import.meta.url)),
     path.join(extensionOutput, '_locales'),

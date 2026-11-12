@@ -64,6 +64,11 @@ test('package CLI completes a fresh build with shared styles and correct icon di
     'rsa',
   );
   assert.equal(manifest.options_ui, undefined);
+  assert.equal(manifest.background.service_worker, 'background.js');
+  assert.ok(entries['background.js']);
+  assert.deepEqual(manifest.permissions, ['storage', 'contextMenus', 'activeTab']);
+  assert.equal(manifest.commands['save-current-page'].suggested_key.default, 'Alt+Shift+D');
+  assert.equal(manifest.commands['save-current-page'].suggested_key.mac, 'Alt+Shift+D');
   for (const size of [16, 32, 48, 128]) {
     const png = Buffer.from(entries[`icons/icon-${size}.png`]);
     assert.equal(png.subarray(0, 8).toString('hex'), '89504e470d0a1a0a');

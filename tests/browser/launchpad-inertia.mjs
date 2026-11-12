@@ -37,6 +37,13 @@ try {
         if (window.inertiaTrace) window.inertiaTrace.cancels.push({ at: performance.now(), id, stack: new Error().stack });
         cancel(id);
       };
+      for (const type of ['pointerdown', 'pointermove', 'pointerup', 'pointercancel']) {
+        document.addEventListener(type, event => {
+          if (!window.strokeTrace) return;
+          window.strokeTrace.push({ type, y: event.clientY, at: event.timeStamp,
+            top: document.querySelector('[data-testid="launchpad-scroll"]')?.scrollTop });
+        }, true);
+      }
     });
     await page.goto(`http://127.0.0.1:${server.httpServer.address().port}`);
     await page.evaluate(mode => {
@@ -69,9 +76,10 @@ try {
       await page.waitForTimeout(60);
     };
     const stroke = async (pause, onIcon = false, {
-      step = 20, interval = 16, count = 8, hover = false, crossRail = false, label = false, edge = 0,
+      step = 20, interval = 16, count = 8, hover = false, crossRail = false, label = false, edge = 0, retraction = 0,
     } = {}) => {
       await reset(edge);
+      await page.evaluate(() => { window.strokeTrace = []; });
       const start = onIcon ? await drawer.locator('[data-launchpad-bookmark]').evaluateAll((elements, label) => {
         const viewport = document.querySelector('[data-testid="launchpad-scroll"]').getBoundingClientRect();
         const element = elements.find(element => {
@@ -87,6 +95,10 @@ try {
         await page.waitForTimeout(interval);
         const x = crossRail ? i <= count / 2 ? rail.x + rail.width / 2 : rect.x + rect.width - 2 : start.x;
         await page.mouse.move(x, start.y - i * step);
+      }
+      if (retraction) {
+        await page.waitForTimeout(16);
+        await page.mouse.move(start.x, start.y - count * step + Math.sign(step) * retraction);
       }
       if (pause) await page.waitForTimeout(pause);
       await page.mouse.up();
@@ -120,7 +132,16 @@ try {
       return (await scroll.evaluate(element => element.scrollTop)) - released;
     };
     for (const direction of [-1, 1]) {
+      if (mode === 'text') {
+        const retracted = await stroke(30, true, { step: direction * 20, retraction: 6 });
+        assert.ok(retracted * direction >= 80,
+          `A 6px hand retraction after icon dragging must retain ${direction} inertia, got ${retracted}px`);
+        const delayed = await stroke(direction > 0 ? 690 : 671, true, { step: direction * 20 });
+        assert.ok(delayed * direction > 80,
+          `Three-finger delayed release must preserve ${direction} inertia, got ${delayed}px`);
+      }
       const edgeDistance = await stroke(30, false, { step: direction * 3, interval: 30, count: 12, edge: -direction });
+      if (edgeDistance * direction < 80) console.log('FAILED EDGE TRACE', JSON.stringify(await page.evaluate(() => window.strokeTrace)));
       assert.ok(edgeDistance * direction >= 80,
         `${mode}: inward slow 36px drag from edge should coast, got ${edgeDistance}px`);
       const distance = await stroke(30, false, { step: direction * 3, interval: 30, count: 12 });
@@ -131,8 +152,7 @@ try {
     for (const pause of [60, 0, 30, 90, 150, 250]) {
       const distance = await stroke(pause);
       distances[pause] = distance;
-      if (pause <= 90) assert.ok(distance > 20, `${mode}: ${pause}ms pause should retain visible inertia, got ${distance}px`);
-      if (pause === 250) assert.equal(distance, 0, `${mode}: a deliberate hold must stop`);
+      assert.ok(distance > 20, `${mode}: ${pause}ms release delay should retain visible inertia, got ${distance}px`);
     }
     assert.ok(await stroke(60, true) > 20, `${mode}: short pause after icon drag retains inertia`);
     const movingDistance = await stroke(30, true, { hover: true });

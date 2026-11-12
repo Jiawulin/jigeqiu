@@ -13,7 +13,7 @@ test('privacy translations cover all sections and retain privacy safeguards', ()
     assert.doesNotMatch(section.title + section.text, /[\u3400-\u9fff]/);
   }
   assert.match(en.map(section => section.text).join(' '), /credentials|Limited Use|chrome.storage.local/);
-  assert.equal(PRIVACY_VERSION, '2026-11-10.1', 'Translation must not reset acknowledgment');
+  assert.equal(PRIVACY_VERSION, '2026-11-12.1', 'New capture permissions require a new acknowledgment');
   assert.match(createTranslator('en')('extensionRemoteImageNotice'), /cookies/);
   assert.match(createTranslator('en')('extensionStorageError'), /Do not uninstall/);
 });

@@ -9,6 +9,7 @@ interface ModalProps {
   maxWidth?: 'sm' | 'md' | 'lg' | 'xl' | '2xl' | '3xl' | '4xl';
   showCloseButton?: boolean;
   contained?: boolean;
+  closeLabel?: string;
 }
 
 export const Modal: React.FC<ModalProps> = ({
@@ -19,6 +20,7 @@ export const Modal: React.FC<ModalProps> = ({
   maxWidth = 'lg',
   showCloseButton = true,
   contained = false,
+  closeLabel = '关闭窗口 (Esc)',
 }) => {
   const dialogRef = useRef<HTMLDivElement>(null);
   useEffect(() => {
@@ -98,7 +100,7 @@ export const Modal: React.FC<ModalProps> = ({
               <button
                 onClick={onClose}
                 className="p-1.5 rounded-full text-slate-600 hover:text-slate-950 dark:text-slate-400 dark:hover:text-white hover:bg-black/5 dark:hover:bg-white/10 transition-colors ml-auto cursor-pointer"
-                aria-label="关闭窗口 (Esc)"
+                aria-label={closeLabel}
               >
                 <X size={18} />
               </button>

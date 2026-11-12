@@ -4,7 +4,14 @@
   "default_locale": "zh_CN",
   "key": "MIIBIjANBgkqhkiG9w0BAQEFAAOCAQ8AMIIBCgKCAQEAlEGnYG7KzutU1cUrdJUHjGBJ8HfEVfc/QMXtHw+PdAH09bQlJopFb1OlYtmx2zfTeGReaP2Rmzochd/1r1CuNb29OuE6r3+jK083Z5p6AsiH1nW+is8BOUWO5rYN2dhlxS6b1eq5GViFwjKWv9NuDnXLkfwEwi5B8BOl9E2YmeKagfhgu1OQ5c3u/TpXXiuY9VZSL6yeH7SR7XZk5DlYfSN/9htLvYhqxTDI3TokXoYyQ6nd0bOdlsbDrXVJcy4qF3pM903T4LtuOnKLE6yQQLK5p+nDl3B3s0ewh1hCUo3qeerluKbpltwSjaCX0YzIz2RsasI7LaMWP1mH4CJgmQIDAQAB",
   "description": "__MSG_extensionDescription__",
-  "permissions": ["storage"],
+  "permissions": ["storage", "contextMenus", "activeTab"],
+  "background": { "service_worker": "background.js", "type": "module" },
+  "commands": {
+    "save-current-page": {
+      "suggested_key": { "default": "Alt+Shift+D", "mac": "Alt+Shift+D" },
+      "description": "__MSG_captureCommand__"
+    }
+  },
   "optional_host_permissions": ["https://*/*"],
   "chrome_url_overrides": {
     "newtab": "index.html"

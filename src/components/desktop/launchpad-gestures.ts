@@ -2,6 +2,9 @@ import {
   DESKTOP_MOUSE_FLICK_DISTANCE, DESKTOP_MOUSE_FLICK_SPEED, DESKTOP_MOUSE_VERTICAL_DISTANCE,
 } from './desktop-gestures';
 
+// Use the same tolerance for activation and hand retraction before release.
+const DRAG_SLOP = 8;
+
 export function createLaunchpadDrag(x: number, y: number, at: number) {
   const samples = [{ y, at }];
   let cancelled = false;
@@ -17,14 +20,14 @@ export function createLaunchpadDrag(x: number, y: number, at: number) {
       if (cancelled) return;
       const previousY = lastY;
       this.deltaY = 0;
-      if (!this.dragging && Math.hypot(nextX - x, nextY - y) > 8) {
+      if (!this.dragging && Math.hypot(nextX - x, nextY - y) > DRAG_SLOP) {
         this.dragging = true;
-        this.deltaY = y - nextY - Math.max(-8, Math.min(8, y - nextY));
+        this.deltaY = y - nextY - Math.max(-DRAG_SLOP, Math.min(DRAG_SLOP, y - nextY));
       } else if (this.dragging) this.deltaY = lastY - nextY;
       lastY = nextY;
       const last = samples.at(-1)!;
       if (!samplePosition) {
-        if (intentDirection && intentDirection * (nextY - intentEnd) < -3) intentDirection = 0;
+        if (intentDirection && intentDirection * (nextY - intentEnd) < -DRAG_SLOP) intentDirection = 0;
         return;
       }
       if (nextY === last.y || now < last.at) return;
@@ -36,7 +39,7 @@ export function createLaunchpadDrag(x: number, y: number, at: number) {
         intentDirection = 0;
       }
       const movement = nextY - intentEnd;
-      if (intentDirection * movement > 0 || Math.abs(movement) > 3) {
+      if (intentDirection * movement > 0 || Math.abs(movement) > (intentDirection ? DRAG_SLOP : 3)) {
         if (intentDirection && Math.sign(movement) !== intentDirection) intentStart = intentEnd;
         intentDirection = Math.sign(movement);
         intentEnd = nextY;
@@ -72,20 +75,17 @@ export function createLaunchpadDrag(x: number, y: number, at: number) {
       const retention = 1 - pause * pause * (3 - 2 * pause);
       return variance && covariance ? Math.max(-8, Math.min(8, -covariance / variance)) * retention : 0;
     },
-    releaseVelocity(now: number) {
+    releaseVelocity(_now: number) {
       if (cancelled || !this.dragging || !intentDirection) return 0;
-      const idle = Math.max(0, now - intentAt);
-      if (idle >= 200) return 0;
       const distance = Math.abs(intentEnd - intentStart);
       const measured = this.velocity(samples.at(-1)!.at);
       const speed = Math.sign(measured) === -intentDirection ? Math.abs(measured) : 0;
       const committed = distance >= DESKTOP_MOUSE_VERTICAL_DISTANCE;
-      const flick = distance >= DESKTOP_MOUSE_FLICK_DISTANCE && idle <= 60 && speed >= DESKTOP_MOUSE_FLICK_SPEED;
+      const flick = distance >= DESKTOP_MOUSE_FLICK_DISTANCE && speed >= DESKTOP_MOUSE_FLICK_SPEED;
       if (!committed && !flick) return 0;
-      // Distance intent, like desktop swipes, makes even a slow deliberate drag perceptible.
-      const pause = Math.max(0, (idle - 80) / 120);
-      const retention = 1 - pause * pause * (3 - 2 * pause);
-      return -intentDirection * Math.max(0.65, speed) * retention;
+      // Like tmviewer, retain the last stroke through macOS three-finger release latency.
+      // A stationary hold also retains momentum; new movement, cancellation and edges still reset it.
+      return -intentDirection * Math.max(0.65, speed);
     },
     scrollPosition(position: number, max: number) {
       const next = Math.max(0, Math.min(max, position + this.deltaY));

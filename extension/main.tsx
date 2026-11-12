@@ -11,6 +11,7 @@ import { readUserLocale } from '../src/services/user-locale';
 import { createTranslator } from '../src/i18n';
 
 const App = lazy(() => import('../src/App'));
+const CapturePage = lazy(() => import('./capture/CapturePage'));
 
 function acknowledged() {
   try {
@@ -58,6 +59,10 @@ function ExtensionApp() {
         }}
       />
     );
+  const capture = new URLSearchParams(location.search).get('capture');
+  if (capture !== null) return <Suspense fallback={<p role="status">{t('extensionOpening')}</p>}>
+    <CapturePage id={capture} language={language} />
+  </Suspense>;
   return (
     <>
       <Suspense fallback={<p role="status">{t('extensionOpening')}</p>}>

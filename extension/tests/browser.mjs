@@ -296,6 +296,7 @@ try {
   const second = await context.newPage();
   await second.goto('chrome://newtab/');
   await second.getByRole('banner').waitFor();
+  await second.evaluate(() => { globalThis.location.hash = '/library'; globalThis.syncMarker = 'still mounted'; });
   assert.equal(
     await second.evaluate(async () => (await globalThis.chrome.storage.local.get('jigeqiu-extension-state-v1'))['jigeqiu-extension-state-v1'].data.jipage_library_v2),
     snapshot,
@@ -317,7 +318,9 @@ try {
   assert.equal(await failedDialog.getByLabel('网站名称', { exact: true }).inputValue(), 'Quota draft');
   await failedDialog.getByRole('button', { name: '添加收藏', exact: true }).click();
   await failedDialog.waitFor({ state: 'hidden' });
-  await second.getByText(/其他标签页.*更新收藏库/).first().waitFor();
+  await second.getByText('Quota draft', { exact: true }).first().waitFor();
+  assert.equal(await second.evaluate(() => globalThis.syncMarker), 'still mounted');
+  assert.equal(await second.getByText(/其他标签页.*更新收藏库/).count(), 0);
   await second.close();
   // The authoritative copy survives removal of all old web storage.
   const committed = await page.evaluate(async () =>

@@ -1,6 +1,12 @@
 import type { MessageTable } from './index';
 
 export const extensionMessages = {
+  extensionCaptureMenu: { zh: '收藏到记个球', en: 'Save to JIGEQIU' },
+  extensionCaptureInvalid: {
+    zh: '无法打开待收藏的网页。仅支持 HTTP 或 HTTPS 网页，请回到原网页重新使用“收藏到记个球”。',
+    en: 'Unable to open this capture request. Only HTTP and HTTPS pages are supported. Return to the page and choose "Save to JIGEQIU" again.',
+  },
+  extensionCaptureClose: { zh: '关闭', en: 'Close' },
   localDataUnavailable: {
     zh: '本机数据暂时无法读取，或桌面加载出现异常。',
     en: 'Local data cannot be read right now, or the desktop could not load.',
