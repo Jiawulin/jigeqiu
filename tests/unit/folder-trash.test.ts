@@ -126,6 +126,18 @@ test('ordinary JSON excludes folder trash but unrelated edits and imports preser
   assert.deepEqual(manager.getFolderTrash(), trash);
 });
 
+test('unrelated malformed legacy URLs do not prevent atomic folder restoration', () => {
+  const { manager, folder, first } = setup();
+  manager.trashFolder(folder.id);
+  const legacy = manager.addBookmark({ ...first, url: 'https://', folderId: undefined });
+  manager.restoreTrashedFolder(manager.getFolderTrash()[0].id);
+  const fresh = new StorageManager();
+  assert.ok(fresh.getFolders().some(item => item.id === folder.id));
+  assert.ok(fresh.getBookmarks().some(item => item.id === first.id));
+  assert.equal(fresh.getBookmarks().find(item => item.id === legacy.id)?.url, 'https://');
+  assert.deepEqual(fresh.getFolderTrash(), []);
+});
+
 test('corrupt folder trash and invalid legacy subtree cannot be persisted', () => {
   const { manager, memory, folder, first } = setup();
   manager.updateBookmark(first.id, { url: 'file:///unsafe' });

@@ -196,6 +196,23 @@ test('restore rejection shows an error, preserves the row and permits retry', as
   assert.doesNotMatch(html(view), /role="alert"/);
 });
 
+for (const language of ['zh', 'en']) {
+  test(`duplicate restoration explains the conflict instead of suggesting blind retry (${language})`, async () => {
+    const view = harness({ language, onRestore: () => { throw new Error('DUPLICATE'); } });
+    await button(view, language === 'en' ? 'Restore bookmark' : '恢复收藏').props.onClick();
+    assert.match(html(view), language === 'en' ? /same URL or ID/ : /相同网址或标识/);
+    assert.match(html(view), /Example tools/);
+    assert.doesNotMatch(html(view), language === 'en' ? /Please try again/ : /请重试/);
+  });
+  test(`folder duplicate restoration explains that the entire batch is retained (${language})`, async () => {
+    const view = harness({ language, entries: [], folderEntries: [folderBatch],
+      onRestoreFolder: () => { throw { code: 'DUPLICATE' }; } });
+    await button(view, language === 'en' ? 'Restore folder' : '恢复目录').props.onClick();
+    assert.match(html(view), language === 'en' ? /entire folder batch remains in Trash/ : /整个目录批次仍保留在回收站/);
+    assert.match(html(view), /Archived projects/);
+  });
+}
+
 test('purge requires a contained confirmation, warns that it cannot be undone, and supports cancellation', () => {
   const purged: string[] = [];
   const view = harness({ language: 'en', onPurge: id => { purged.push(id); } });

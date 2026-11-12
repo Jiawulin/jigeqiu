@@ -451,6 +451,13 @@ export class StorageManager {
     return trash;
   }
 
+  private activeBookmarkUrls(bookmarks: Bookmark[]): Set<string> {
+    return new Set(bookmarks.flatMap(bookmark => {
+      try { return [normalizeBookmarkUrl(bookmark.url)]; }
+      catch { return []; } // Unrelated legacy URLs stay untouched, but cannot collide with a valid HTTP(S) URL.
+    }));
+  }
+
   restoreTrashedBookmark(entryId: string): Bookmark {
     const current = this.readLibrary();
     this.assertAssetBaseline(current);
@@ -458,8 +465,10 @@ export class StorageManager {
     if (this.trashBase !== JSON.stringify(trash)) throw new Error('CONFLICT');
     const entry = trash.find(item => item.id === entryId);
     if (!entry) throw new Error('NOT_FOUND');
-    if (current.folders.some(item => item.id === entry.bookmark.id) || current.bookmarks.some(item => item.id === entry.bookmark.id
-      || normalizeBookmarkUrl(item.url) === normalizeBookmarkUrl(entry.bookmark.url))) throw new Error('DUPLICATE');
+    const url = normalizeBookmarkUrl(entry.bookmark.url);
+    if (current.folders.some(item => item.id === entry.bookmark.id)
+      || current.bookmarks.some(item => item.id === entry.bookmark.id)
+      || this.activeBookmarkUrls(current.bookmarks).has(url)) throw new Error('DUPLICATE');
     const parent = current.folders.find(folder => folder.id === entry.bookmark.folderId);
     const bookmark = { ...entry.bookmark, folderId: parent?.id, pinnedToDesktop: false, updatedAt: Date.now() };
     // Earlier batch members still in Trash do not occupy an active array position.
@@ -669,10 +678,11 @@ export class StorageManager {
     if (!entry) throw new Error('NOT_FOUND');
     const occupied = new Set([...current.bookmarks, ...current.folders].map(item => item.id));
     const layout = this.getDesktopLayout();
+    const activeUrls = this.activeBookmarkUrls(current.bookmarks);
     for (const item of [...(layout?.folders ?? []), ...(layout?.shortcuts ?? []), ...(layout?.dock ?? [])]) occupied.add(item.id);
     if (entry.folders.some(({ folder }) => occupied.has(folder.id))
       || entry.bookmarks.some(({ bookmark }) => occupied.has(bookmark.id)
-        || current.bookmarks.some(item => normalizeBookmarkUrl(item.url) === normalizeBookmarkUrl(bookmark.url)))) {
+        || activeUrls.has(normalizeBookmarkUrl(bookmark.url)))) {
       throw new Error('DUPLICATE');
     }
     const folders = [...current.folders];

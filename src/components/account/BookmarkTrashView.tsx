@@ -20,9 +20,12 @@ export interface BookmarkTrashViewProps {
 }
 
 type TrashKind = 'bookmark' | 'folder';
-function isKnownSaveError(cause: unknown): boolean {
-  const code = typeof cause === 'object' && cause !== null && 'code' in cause && typeof cause.code === 'string'
+function trashErrorCode(cause: unknown): string {
+  return typeof cause === 'object' && cause !== null && 'code' in cause && typeof cause.code === 'string'
     ? cause.code : cause instanceof Error ? cause.message : '';
+}
+function isKnownSaveError(cause: unknown): boolean {
+  const code = trashErrorCode(cause);
   return ['COMMIT_UNCERTAIN', 'CONFLICT', 'LOCK_UNAVAILABLE', 'QUOTA_EXCEEDED',
     'SecurityError', 'STORAGE_UNAVAILABLE', 'INVALID_REFERENCE'].includes(code)
     || (cause instanceof Error && ['QuotaExceededError', 'SecurityError'].includes(cause.name));
@@ -76,7 +79,8 @@ export function BookmarkTrashView({
   const currentPage = Math.min(page, Math.max(1, Math.ceil(filtered.length / pageSize)));
   const pageItems = filtered.slice((currentPage - 1) * pageSize, currentPage * pageSize);
   useEffect(() => { setPage(currentPage); }, [currentPage]);
-  const errorMessage = !error ? '' : isKnownSaveError(error.cause)
+  const errorMessage = !error ? '' : error.action === 'restore' && trashErrorCode(error.cause) === 'DUPLICATE'
+    ? t(error.kind === 'folder' ? 'restoreFolderDuplicate' : 'restoreBookmarkDuplicate') : isKnownSaveError(error.cause)
     ? preferenceSaveError(error.cause, language, 'library') : error.kind === 'folder'
     ? t(error.action === 'restore' ? 'restoreFolderError' : 'purgeFolderError')
     : t(error.action === 'restore' ? 'restoreBookmarkError' : 'purgeBookmarkError');

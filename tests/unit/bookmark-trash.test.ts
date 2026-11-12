@@ -84,6 +84,20 @@ test('duplicate URL restoration is rejected without losing the trash entry', () 
   assert.equal(memory.getItem(key), before);
 });
 
+test('an unrelated unsupported legacy URL cannot prevent restoring a valid bookmark', () => {
+  const { manager, bookmark } = setup();
+  manager.deleteBookmark(bookmark.id);
+  const legacy = manager.addBookmark({
+    ...bookmark, title: 'Legacy local document', url: 'file:///legacy-document', folderId: undefined,
+  });
+  const entry = manager.getBookmarkTrash()[0];
+  manager.restoreTrashedBookmark(entry.id);
+  const fresh = new StorageManager();
+  assert.ok(fresh.getBookmarks().some(item => item.id === bookmark.id));
+  assert.equal(fresh.getBookmarks().find(item => item.id === legacy.id)?.url, 'file:///legacy-document');
+  assert.deepEqual(fresh.getBookmarkTrash(), []);
+});
+
 test('trash is excluded from ordinary export and survives JSON imports and unrelated edits', () => {
   const { manager, memory, bookmark } = setup();
   manager.deleteBookmark(bookmark.id);
