@@ -1,8 +1,11 @@
 import assert from 'node:assert/strict';
 import { readFile, mkdir } from 'node:fs/promises';
 import { createServer } from 'vite';
+import { captureScreenshots, layoutCases } from './helpers/layout-cases.mjs';
 
 const { chromium } = await import(process.env.PLAYWRIGHT_MODULE ?? 'playwright');
+const layouts = layoutCases();
+const screenshots = captureScreenshots();
 const server = await createServer({ server: { host: '127.0.0.1', port: 0 } });
 let browser;
 try {
@@ -134,47 +137,43 @@ try {
   await page.getByRole('alert').filter({ hasText: '当前默认搜索引擎不存在或已停用' }).waitFor();
   assert.equal(await page.getByText(/备份无效：请检查文件版本/).count(), 0);
   assert.equal(unexpectedDownloads, 0);
-  await mkdir('test-results/screenshots', { recursive: true });
-  for (const language of ['zh', 'en']) {
-    for (const appearanceMode of ['light-glass', 'dark-glass']) {
-      for (const width of [1440, 390, 320]) {
-        await page.evaluate(({ language, appearanceMode }) => {
-          const settings = JSON.parse(localStorage.getItem('jipage_settings_v1'));
-          localStorage.setItem('jipage_settings_v1', JSON.stringify({ ...settings, language, appearanceMode, defaultSearchEngineId: 'se-google' }));
-        }, { language, appearanceMode });
-        await page.setViewportSize({ width, height: 900 });
-        await page.reload();
-        await open(language === 'en');
-        for (const format of ['html', 'json']) {
-          await importFormat(format, language === 'en').check();
-          await exportFormat(format, language === 'en').check();
-          await exportFormat(format, language === 'en').focus();
-          assert.equal(await exportFormats(language === 'en').locator('input:checked').count(), 1);
-          assert.equal(await importFormats(language === 'en').locator('input:checked').count(), 1);
-          for (const label of await importFormats(language === 'en').locator('label').all()) {
-            const bounds = await label.boundingBox();
-            assert.ok(bounds.x >= 0 && bounds.x + bounds.width <= width, 'Expanded formats fit the viewport');
-          }
-          await page.screenshot({ path: `test-results/screenshots/transfer-formats-options-${language}-${appearanceMode}-${width}-${format}.png`, fullPage: true });
-          const tip = page.getByRole('button', { name: language === 'en' ? 'Export format help' : '导出格式说明', exact: true });
-          await tip.focus();
-          const tooltip = page.getByRole('tooltip');
-          await tooltip.waitFor();
-          const bounds = await tooltip.boundingBox();
-          assert.ok(bounds.x >= 0 && bounds.x + bounds.width <= width);
-          const helpBounds = await tip.boundingBox();
-          assert.ok(bounds.y >= 0 && bounds.y + bounds.height <= helpBounds.y,
-            'Export help opens above its control without clipping or taskbar overlap');
-          assert.equal(await page.evaluate(() => document.documentElement.scrollWidth > innerWidth), false);
-          assert.equal(await page.getByRole('tabpanel').evaluate(panel => panel.scrollWidth > panel.clientWidth), false);
-          await page.screenshot({ path: `test-results/screenshots/transfer-formats-${language}-${appearanceMode}-${width}-${format}.png`, fullPage: true });
-          await page.keyboard.press('Escape');
-        }
+  if (screenshots) await mkdir('test-results/screenshots', { recursive: true });
+  for (const { language, appearanceMode, width } of layouts) {
+    await page.evaluate(({ language, appearanceMode }) => {
+      const settings = JSON.parse(localStorage.getItem('jipage_settings_v1'));
+      localStorage.setItem('jipage_settings_v1', JSON.stringify({ ...settings, language, appearanceMode, defaultSearchEngineId: 'se-google' }));
+    }, { language, appearanceMode });
+    await page.setViewportSize({ width, height: 900 });
+    await page.reload();
+    await open(language === 'en');
+    for (const format of ['html', 'json']) {
+      await importFormat(format, language === 'en').check();
+      await exportFormat(format, language === 'en').check();
+      await exportFormat(format, language === 'en').focus();
+      assert.equal(await exportFormats(language === 'en').locator('input:checked').count(), 1);
+      assert.equal(await importFormats(language === 'en').locator('input:checked').count(), 1);
+      for (const label of await importFormats(language === 'en').locator('label').all()) {
+        const bounds = await label.boundingBox();
+        assert.ok(bounds.x >= 0 && bounds.x + bounds.width <= width, 'Expanded formats fit the viewport');
       }
+      if (screenshots) await page.screenshot({ path: `test-results/screenshots/transfer-formats-options-${language}-${appearanceMode}-${width}-${format}.png`, fullPage: true });
+      const tip = page.getByRole('button', { name: language === 'en' ? 'Export format help' : '导出格式说明', exact: true });
+      await tip.focus();
+      const tooltip = page.getByRole('tooltip');
+      await tooltip.waitFor();
+      const bounds = await tooltip.boundingBox();
+      assert.ok(bounds.x >= 0 && bounds.x + bounds.width <= width);
+      const helpBounds = await tip.boundingBox();
+      assert.ok(bounds.y >= 0 && bounds.y + bounds.height <= helpBounds.y,
+        'Export help opens above its control without clipping or taskbar overlap');
+      assert.equal(await page.evaluate(() => document.documentElement.scrollWidth > innerWidth), false);
+      assert.equal(await page.getByRole('tabpanel').evaluate(panel => panel.scrollWidth > panel.clientWidth), false);
+      if (screenshots) await page.screenshot({ path: `test-results/screenshots/transfer-formats-${language}-${appearanceMode}-${width}-${format}.png`, fullPage: true });
+      await page.keyboard.press('Escape');
     }
   }
   assert.deepEqual(errors, []);
-  console.log('PASS ordinary preference backup, no premature file error, scoped local export failure, import/export format selectors, one file picker, help hover/focus/click/Escape, dirty format cancel/discard, confirmed import, JSON export, bilingual/themes/1440/390/320');
+  console.log(`PASS ordinary preference backup, no premature file error, scoped local export failure, import/export formats, help, dirty preview, confirmed import, JSON export; ${layouts.length} layout cases, screenshots ${screenshots ? 'on' : 'off'}`);
 } finally {
   await browser?.close();
   await server.close();

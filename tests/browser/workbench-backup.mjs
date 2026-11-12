@@ -1,5 +1,6 @@
 import assert from 'node:assert/strict';
 import { readFile, mkdir } from 'node:fs/promises';
+import { captureScreenshots, layoutCases } from './helpers/layout-cases.mjs';
 import { createServer } from 'vite';
 
 const { chromium } = await import(process.env.PLAYWRIGHT_MODULE ?? 'playwright');
@@ -177,35 +178,29 @@ try {
   await page.getByRole('button', { name: '前往收藏导入导出', exact: true }).click();
   await discard.getByRole('button', { name: '放弃预览并切换', exact: true }).click();
   assert.equal(await state(), beforeWrongSwitch);
-  // Responsive locale/theme checks on both panels with a populated preview.
-  await mkdir('test-results/screenshots', { recursive: true });
-  for (const language of ['zh', 'en']) {
-    for (const appearanceMode of ['light-glass', 'dark-glass']) {
-      for (const width of [1440, 390, 320]) {
-        await page.evaluate(({ language, appearanceMode }) => {
-          const settings = JSON.parse(localStorage.getItem('jipage_settings_v1'));
-          localStorage.setItem('jipage_settings_v1', JSON.stringify({ ...settings, language, appearanceMode }));
-        }, { language, appearanceMode });
-        await page.setViewportSize({ width, height: width === 1440 ? 1000 : 844 });
-        await page.reload();
-        await openTransfer(page, language === 'en');
-        for (const backup of [false, true]) {
-          if (backup) {
-            await page.getByRole('tab', { name: language === 'en' ? 'Backup & restore' : '资产备份恢复', exact: true }).click();
-            await page.getByLabel(language === 'en' ? 'Choose an asset backup JSON file' : '选择资产备份 JSON 文件', { exact: true }).setInputFiles({
-              name: 'synthetic.json', mimeType: 'application/json', buffer: Buffer.from(text),
-            });
-            await page.getByRole('checkbox', { name: language === 'en' ? /I have backed up/ : /我已备份/ }).waitFor();
-            assert.equal(await page.getByRole('term').filter({ hasText: language === 'en' ? /^Legacy collections$/ : /^历史网址单$/ }).count(), 0);
-            assert.equal(await page.getByRole('term').filter({ hasText: language === 'en' ? /^Bookmark folders$/ : /^收藏文件夹$/ }).count(), 2);
-            await page.getByRole('status').filter({ hasText: language === 'en' ? 'Asset backup JSON identified' : '已识别为资产备份 JSON' }).waitFor();
-          }
-          assert.equal(await page.evaluate(() => document.documentElement.scrollWidth > innerWidth), false);
-          assert.equal(await page.getByRole('tabpanel').evaluate(panel => panel.scrollWidth > panel.clientWidth), false);
-          await page.screenshot({ path: `test-results/screenshots/workbench-${language}-${appearanceMode}-${width}-${backup ? 'restore' : 'bookmarks'}.png`, fullPage: true });
-        }
-      }
-    }
+  // Bookmark-panel layouts belong to transfer-formats; this suite owns restore previews.
+  const layouts = layoutCases();
+  const screenshots = captureScreenshots();
+  if (screenshots) await mkdir('test-results/screenshots', { recursive: true });
+  for (const { language, appearanceMode, width } of layouts) {
+    await page.evaluate(({ language, appearanceMode }) => {
+      const settings = JSON.parse(localStorage.getItem('jipage_settings_v1'));
+      localStorage.setItem('jipage_settings_v1', JSON.stringify({ ...settings, language, appearanceMode }));
+    }, { language, appearanceMode });
+    await page.setViewportSize({ width, height: width === 1440 ? 1000 : 844 });
+    await page.reload();
+    await openTransfer(page, language === 'en');
+    await page.getByRole('tab', { name: language === 'en' ? 'Backup & restore' : '资产备份恢复', exact: true }).click();
+    await page.getByLabel(language === 'en' ? 'Choose an asset backup JSON file' : '选择资产备份 JSON 文件', { exact: true }).setInputFiles({
+      name: 'synthetic.json', mimeType: 'application/json', buffer: Buffer.from(text),
+    });
+    await page.getByRole('checkbox', { name: language === 'en' ? /I have backed up/ : /我已备份/ }).waitFor();
+    assert.equal(await page.getByRole('term').filter({ hasText: language === 'en' ? /^Legacy collections$/ : /^历史网址单$/ }).count(), 0);
+    assert.equal(await page.getByRole('term').filter({ hasText: language === 'en' ? /^Bookmark folders$/ : /^收藏文件夹$/ }).count(), 2);
+    await page.getByRole('status').filter({ hasText: language === 'en' ? 'Asset backup JSON identified' : '已识别为资产备份 JSON' }).waitFor();
+    assert.equal(await page.evaluate(() => document.documentElement.scrollWidth > innerWidth), false);
+    assert.equal(await page.getByRole('tabpanel').evaluate(panel => panel.scrollWidth > panel.clientWidth), false);
+    if (screenshots) await page.screenshot({ path: `test-results/screenshots/workbench-${language}-${appearanceMode}-${width}-restore.png`, fullPage: true });
   }
   // A queued restore must not write after leaving its page.
   const { page: leaving } = await fresh();
@@ -252,7 +247,7 @@ try {
   assert.deepEqual(await recovery.evaluate(() => JSON.parse(localStorage.getItem('jipage_library_v2'))), core);
   assert.ok(await recovery.evaluate(() => localStorage.getItem('jipage_workbench_restore_v1')));
   assert.deepEqual(errors, []);
-  console.log('PASS workbench export/clean-context restore, stable IDs/layout/order/engines, preview/read-only, acknowledgment, queued disable/cancel, dirty tabs, bookmark-only merge, retained cleanup, wrong-file guidance, startup rollback/conflict, bilingual/theme/1440/390/320 layouts');
+  console.log(`PASS workbench export/clean-context restore, stable IDs/layout/order/engines, preview/read-only, acknowledgment, queued disable/cancel, dirty tabs, bookmark-only merge, retained cleanup, wrong-file guidance, startup rollback/conflict; ${layouts.length} restore layout cases, screenshots ${screenshots ? 'on' : 'off'}`);
 } finally {
   await browser?.close();
   await server.close();

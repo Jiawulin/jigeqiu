@@ -341,6 +341,8 @@ HTML 解析使用 parse5，拼音索引使用 pinyin-pro。
 | `npm run package:extension` | 构建并生成扩展 ZIP 与 SHA256 |
 | `npm run preview` | 预览构建结果 |
 | `npm test` | 运行单元测试 |
+| `npm run test:unit -- 名称` | 仅运行指定单测文件，可指定多个名称 |
+| `npm run test:browser -- 专项名` | 去重后集中运行指定浏览器专项 |
 | `npm run typecheck` | TypeScript 类型检查 |
 | `npm run lint` | JavaScript 工具与测试脚本检查 |
 | `npm run check` | 执行测试、契约、lint、类型、受控格式检查与构建 |

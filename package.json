@@ -21,6 +21,8 @@
     "format": "prettier --write package.json eslint.config.mjs .prettierrc.json \".github/workflows/*.yml\" \"tests/tooling/*.mjs\"",
     "test:tooling": "node --test tests/tooling/*.test.mjs",
     "test": "node --import tsx --test tests/unit/*.test.ts",
+    "test:unit": "node scripts/test-selected.mjs unit",
+    "test:browser": "node scripts/test-selected.mjs browser",
     "test:legacy": "node --import tsx --test tests/legacy/*.test.ts",
     "test:contracts": "node tests/contracts/typecheck.mjs",
     "test:browser:persistence": "node tests/browser/persistence.mjs",

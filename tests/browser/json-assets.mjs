@@ -1,5 +1,6 @@
 import assert from 'node:assert/strict';
 import { readFile, mkdir } from 'node:fs/promises';
+import { captureScreenshots } from './helpers/layout-cases.mjs';
 import { createServer } from 'vite';
 const { chromium } = await import(process.env.PLAYWRIGHT_MODULE ?? 'playwright');
 const server = await createServer({ server: { host: '127.0.0.1', port: 0 } });
@@ -116,10 +117,12 @@ try {
   assert.equal(await transfer.getByRole('button', { name: '确认导入收藏', exact: true }).isDisabled(), true, 'Identical import is a no-op');
   await transfer.getByRole('checkbox', { name: '保留重复副本', exact: true }).check();
   assert.equal(await transfer.getByRole('button', { name: '确认导入收藏', exact: true }).isEnabled(), true);
-  await mkdir('test-results/screenshots', { recursive: true });
-  await page.screenshot({ path: 'test-results/screenshots/json-assets-desktop.png', fullPage: true });
+  if (captureScreenshots()) {
+    await mkdir('test-results/screenshots', { recursive: true });
+    await page.screenshot({ path: 'test-results/screenshots/json-assets-desktop.png', fullPage: true });
+  }
   await page.setViewportSize({ width: 390, height: 844 });
-  await page.screenshot({ path: 'test-results/screenshots/json-assets-mobile.png', fullPage: true });
+  if (captureScreenshots()) await page.screenshot({ path: 'test-results/screenshots/json-assets-mobile.png', fullPage: true });
   assert.equal(await page.evaluate(() => document.documentElement.scrollWidth > innerWidth), false);
   await transfer.getByRole('button', { name: '确认导入收藏', exact: true }).click();
   await page.getByRole('button', { name: '查看收藏', exact: true }).waitFor();

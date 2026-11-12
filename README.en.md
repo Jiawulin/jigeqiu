@@ -371,6 +371,8 @@ HTML parsing uses parse5; pinyin indexing uses pinyin-pro.
 | `npm run package:extension` | Build the extension ZIP and SHA256 manifest |
 | `npm run preview` | Preview the production build |
 | `npm test` | Run unit tests |
+| `npm run test:unit -- <names>` | Run only the named unit test files |
+| `npm run test:browser -- <suites>` | Run selected browser suites once each |
 | `npm run typecheck` | Check TypeScript types |
 | `npm run lint` | Lint JavaScript tooling and test runners |
 | `npm run check` | Run tests, contract checks, lint, types, scoped formatting, and the build |
