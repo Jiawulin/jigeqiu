@@ -65,7 +65,7 @@ test('JSON import retains error identity while switching locales', async () => {
   const view = harness('account/JsonAssetTransfer', 'JsonAssetTransfer', {
     '../../services/storage': { storage: { previewJsonAssetImport() { throw new Error('IMPORT_INVALID'); } } },
   });
-  assert.equal((view.render().props as Record<string, unknown>)['aria-label'], 'JSON Asset Backup');
+  assert.equal((view.render().props as Record<string, unknown>)['aria-label'], 'Bookmark asset JSON');
   await view.find(node => node.type === 'input' && node.props.type === 'file').props.onChange({
     target: { files: [{ name: 'bad.json', size: 1, text: async () => '{}' }], value: '' },
   });

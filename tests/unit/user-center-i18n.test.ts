@@ -190,8 +190,10 @@ test('appearance, import/export descriptions and page actions use the selected l
   assert.match(zh, /夜间模式/);
   assert.doesNotMatch(zh, /降低透明度|浅色玻璃|深色玻璃/);
   assert.match(zh, /默认标准 \(48px\)/);
-  assert.match(html(harness('en-US', 'import-export')), /Export standard HTML bookmarks \(Chrome \/ Edge\)/);
-  assert.match(html(harness('zh-CN', 'import-export')), /导出标准 HTML 书签文件 \(Chrome \/ Edge 适用\)/);
+  assert.match(html(harness('en-US', 'import-export')), /Export bookmarks/);
+  assert.match(html(harness('en-US', 'import-export')), /Export format/);
+  assert.match(html(harness('zh-CN', 'import-export')), /导出收藏/);
+  assert.match(html(harness('zh-CN', 'import-export')), /导出格式/);
 });
 
 test('engine and desktop pin actions announce localized success and guard messages', async () => {
@@ -311,11 +313,10 @@ test('HTML export failure uses localized feedback without claiming library mutat
   for (const language of ['en-US', 'zh-CN']) {
     const view = harness(language, 'import-export');
     view.storage.exportHtmlBookmarks = () => { throw new Error('read failed'); };
-    findButton(view, language === 'en-US'
-      ? 'Export standard HTML bookmarks (Chrome / Edge)'
-      : '导出标准 HTML 书签文件 (Chrome / Edge 适用)').props.onClick();
-    assert.match(html(view), language === 'en-US'
-      ? /No library data was changed/ : /收藏库数据未修改/);
+    const transfer = elements(view.render()).find(node => typeof node.type === 'function' && node.type.name === 'AssetTransferPage');
+    assert.ok(transfer);
+    transfer.props.onExportHtml();
+    assert.equal(elements(view.render()).find(node => typeof node.type === 'function' && node.type.name === 'AssetTransferPage')?.props.htmlExportError, true);
     assert.deepEqual(view.toasts, []);
   }
 });
@@ -430,13 +431,13 @@ test('HTML export failure and Chrome import locale follow a language change imme
   const view = harness('en', 'import-export');
   let attempts = 0;
   view.storage.exportHtmlBookmarks = () => { attempts++; throw new Error('failed'); };
-  findButton(view, 'Export standard HTML bookmarks (Chrome / Edge)').props.onClick();
-  assert.equal(alertText(view), createTranslator('en')('managerHtmlExportFailed'));
+  const transfer = () => elements(view.render()).find(node => typeof node.type === 'function' && node.type.name === 'AssetTransferPage');
+  assert.ok(transfer());
+  transfer()!.props.onExportHtml();
+  assert.equal(transfer()!.props.htmlExportError, true);
+  assert.equal(transfer()!.props.language, 'en');
   view.props.userSettings.language = 'zh';
-  assert.equal(alertText(view), createTranslator('zh')('managerHtmlExportFailed'));
-  const importer = elements(view.render()).find(node =>
-    typeof node.type === 'function' && node.type.name === 'PrototypeChromeImport');
-  assert.ok(importer);
-  assert.equal(importer.props.language, 'zh');
+  assert.equal(transfer()!.props.htmlExportError, true);
+  assert.equal(transfer()!.props.language, 'zh');
   assert.equal(attempts, 1);
 });

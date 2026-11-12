@@ -128,8 +128,9 @@ try {
       .some(engine => engine.id === 'se-bing')), false);
     await page.setViewportSize({ width: 1280, height: 1000 });
     await navigation.getByRole('button', { name: en ? 'Import & export' : '导入与导出', exact: true }).click();
-    await page.getByRole('heading', { name: en ? 'Import Chrome bookmarks' : '导入 Chrome 书签', exact: true }).waitFor();
-    await page.getByRole('heading', { name: en ? 'JSON Asset Backup' : 'JSON 资产备份', exact: true }).waitFor();
+    await page.getByRole('heading', { name: en ? 'Import bookmarks' : '导入收藏', exact: true }).waitFor();
+    await page.getByRole('group', { name: en ? 'Import format' : '导入格式', exact: true }).waitFor();
+    await page.getByRole('heading', { name: en ? 'Export bookmarks' : '导出收藏', exact: true }).waitFor();
     await navigation.getByRole('button', { name: en ? 'Appearance' : '外观', exact: true }).click();
     await page.getByRole('heading', { name: en ? 'Taskbar preferences' : '任务栏偏好', exact: true }).waitFor();
     await page.getByRole('heading', { name: en ? 'Website icons' : '网站图标', exact: true }).waitFor();

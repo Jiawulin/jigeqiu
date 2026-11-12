@@ -22,7 +22,7 @@ try {
   await server.listen();
   browser = await chromium.launch({ headless: true });
   const origin = `http://127.0.0.1:${server.httpServer.address().port}`;
-  const context = await browser.newContext({ viewport: { width: 1440, height: 1000 } });
+  const context = await browser.newContext({ locale: 'zh-CN', viewport: { width: 1440, height: 1000 } });
   await context.route('https://**/*', route => route.fulfill({ status: 200, body: 'Test destination' }));
   const page = await context.newPage();
   const errors = [];
@@ -41,13 +41,14 @@ try {
   await page.reload();
   const initial = await page.evaluate(() => JSON.stringify(Object.fromEntries(Object.entries(localStorage))));
   await openImport(page);
-  await page.getByLabel('Chrome 书签 HTML 文件').setInputFiles(file);
+  await page.getByLabel('浏览器书签 HTML 文件').setInputFiles(file);
   await page.getByText('2 个网址', { exact: true }).waitFor();
   assert.equal(await page.evaluate(() => JSON.stringify(Object.fromEntries(Object.entries(localStorage)))), initial);
   await page.getByRole('button', { name: '取消', exact: true }).click();
   assert.equal(await page.evaluate(() => JSON.stringify(Object.fromEntries(Object.entries(localStorage)))), initial);
-  await page.getByLabel('Chrome 书签 HTML 文件').setInputFiles(file);
-  await page.getByRole('button', { name: '确认导入', exact: true }).click();
+  await page.getByLabel('浏览器书签 HTML 文件').setInputFiles(file);
+  await page.getByRole('button', { name: '确认导入收藏', exact: true }).click();
+  await page.getByRole('button', { name: '查看收藏', exact: true }).click();
   await page.getByText('Alpha imported', { exact: true }).waitFor();
   const library = await page.evaluate(() => JSON.parse(localStorage.getItem('jipage_library_v2')));
   assert.equal(library.bookmarks.length, 3);
@@ -122,12 +123,12 @@ try {
   await mkdir(screenshots, { recursive: true });
   await page.screenshot({ path: `${screenshots}/desktop-import-integrated.png`, fullPage: true });
   await openImport(page);
-  await page.getByLabel('Chrome 书签 HTML 文件').setInputFiles(file);
+  await page.getByLabel('浏览器书签 HTML 文件').setInputFiles(file);
   const beforeFailure = await page.evaluate(() => JSON.parse(localStorage.getItem('jipage_library_v2')));
   await page.evaluate(() => {
     Storage.prototype.setItem = () => { throw new DOMException('Full', 'QuotaExceededError'); };
   });
-  await page.getByRole('button', { name: '确认导入', exact: true }).click();
+  await page.getByRole('button', { name: '确认导入收藏', exact: true }).click();
   await page.getByRole('alert').filter({ hasText: '空间不足' }).waitFor();
   assert.deepEqual(await page.evaluate(() => JSON.parse(localStorage.getItem('jipage_library_v2'))), beforeFailure,
     'Failed import preserves the complete library and independent layout');

@@ -196,7 +196,8 @@ test('launchpad emits query/menu changes once even with recreated callbacks and 
 
 test('host anchors and import forwarding live on actual controls', () => {
   const read = (file: string) => readFileSync(new URL(`../../src/components/${file}.tsx`, import.meta.url), 'utf8');
-  assert.match(read('account/UserCenterView'), /<PrototypeChromeImport[^>]*onboarding=\{onboarding\}/);
+  assert.match(read('account/UserCenterView'), /<AssetTransferPage[^>]*onboarding=\{onboarding\}/);
+  assert.match(read('account/AssetTransferPage'), /<PrototypeChromeImport[^>]*onboarding=\{onboarding\}/);
   assert.match(read('account/PrototypeChromeImport'), /<section[^>]*data-onboarding="html-import"/);
   assert.match(read('account/PrototypeChromeImport'), /<input[^>]*data-onboarding="import-file"/);
   assert.match(read('account/JsonAssetTransfer'), /<button[^>]*data-onboarding="json-export"[^>]*onClick=\{exportAssets\}/);

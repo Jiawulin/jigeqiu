@@ -7,7 +7,7 @@ let browser;
 try {
   await server.listen();
   browser = await chromium.launch({ headless: true });
-  const context = await browser.newContext({ viewport: { width: 1440, height: 1000 }, acceptDownloads: true });
+  const context = await browser.newContext({ locale: 'zh-CN', viewport: { width: 1440, height: 1000 }, acceptDownloads: true });
   await context.route('https://**/*', route => route.fulfill({ body: '' }));
   const page = await context.newPage();
   page.setDefaultTimeout(8000);
@@ -37,11 +37,13 @@ try {
     if (page.viewportSize().width < 768) await page.getByRole('combobox', { name: '管理中心小节' }).selectOption('import-export');
     else await page.getByRole('navigation', { name: '管理中心导航' })
       .getByRole('button', { name: '导入与导出', exact: true }).click();
+    await page.getByRole('group', { name: '导入格式', exact: true }).getByRole('radio', { name: '记个球收藏 · JSON', exact: true }).check();
   }
   await openTransfer();
-  const transfer = page.getByRole('region', { name: 'JSON 资产备份', exact: true });
+  const transfer = page.getByRole('region', { name: '收藏资产 JSON', exact: true });
   const downloadPending = page.waitForEvent('download');
-  await transfer.getByRole('button', { name: '导出全部资产', exact: true }).click();
+  await page.getByRole('group', { name: '导出格式', exact: true }).getByRole('radio', { name: '记个球收藏 · JSON', exact: true }).check();
+  await page.getByRole('region', { name: '导出收藏', exact: true }).getByRole('button', { name: '导出收藏', exact: true }).click();
   const download = await downloadPending;
   const text = await readFile(await download.path(), 'utf8');
   const exported = JSON.parse(text);
@@ -84,12 +86,13 @@ try {
     window.savedSetItem = Storage.prototype.setItem;
     Storage.prototype.setItem = () => { throw new DOMException('Full', 'QuotaExceededError'); };
   });
-  await transfer.getByRole('button', { name: '确认导入', exact: true }).click();
+  await transfer.getByRole('button', { name: '确认导入收藏', exact: true }).click();
   await transfer.getByRole('alert').filter({ hasText: '空间不足' }).waitFor();
   assert.equal(await snapshot(), initial, 'Failed commit leaves both library and collections intact');
   await page.evaluate(() => { Storage.prototype.setItem = window.savedSetItem; });
-  await transfer.getByRole('button', { name: '确认导入', exact: true }).click();
-  await page.getByRole('heading', { name: '全部收藏', exact: true }).waitFor();
+  await transfer.getByRole('button', { name: '确认导入收藏', exact: true }).click();
+  await page.getByRole('button', { name: '查看收藏', exact: true }).waitFor();
+  assert.equal(await page.getByRole('tab', { name: '收藏导入导出', exact: true }).getAttribute('aria-selected'), 'true');
   const assets = await page.evaluate(() => JSON.parse(localStorage.getItem('jipage_library_v2')));
   assert.equal(assets.bookmarks.length, 1);
   assert.equal(assets.folders.length, 2);
@@ -107,19 +110,19 @@ try {
   assert.match(assets.collections[0].items[0].recommendationReason, /Useful for photos/);
   await page.reload();
   await openTransfer();
-  assert.match(await transfer.innerText(), /历史网址单/);
+  assert.equal(await page.getByRole('group', { name: '导入格式', exact: true }).getByRole('radio', { name: '记个球收藏 · JSON', exact: true }).isChecked(), true);
   await choose(exported);
   await preview.waitFor();
-  assert.equal(await transfer.getByRole('button', { name: '确认导入', exact: true }).isDisabled(), true, 'Identical import is a no-op');
+  assert.equal(await transfer.getByRole('button', { name: '确认导入收藏', exact: true }).isDisabled(), true, 'Identical import is a no-op');
   await transfer.getByRole('checkbox', { name: '保留重复副本', exact: true }).check();
-  assert.equal(await transfer.getByRole('button', { name: '确认导入', exact: true }).isEnabled(), true);
+  assert.equal(await transfer.getByRole('button', { name: '确认导入收藏', exact: true }).isEnabled(), true);
   await mkdir('test-results/screenshots', { recursive: true });
   await page.screenshot({ path: 'test-results/screenshots/json-assets-desktop.png', fullPage: true });
   await page.setViewportSize({ width: 390, height: 844 });
   await page.screenshot({ path: 'test-results/screenshots/json-assets-mobile.png', fullPage: true });
   assert.equal(await page.evaluate(() => document.documentElement.scrollWidth > innerWidth), false);
-  await transfer.getByRole('button', { name: '确认导入', exact: true }).click();
-  await page.getByRole('heading', { name: '全部收藏', exact: true }).waitFor();
+  await transfer.getByRole('button', { name: '确认导入收藏', exact: true }).click();
+  await page.getByRole('button', { name: '查看收藏', exact: true }).waitFor();
   const after = await page.evaluate(() => JSON.parse(localStorage.getItem('jipage_library_v2')));
   assert.equal(after.bookmarks.length, 2);
   assert.equal(after.collections.length, 2);

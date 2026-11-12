@@ -100,7 +100,7 @@ try {
   browser = await chromium.launch({ headless: true });
   report.environment.browser = browser.version();
   async function device() {
-    const context = await browser.newContext({ viewport: { width: 1440, height: 1000 }, acceptDownloads: true });
+    const context = await browser.newContext({ locale: 'zh-CN', viewport: { width: 1440, height: 1000 }, acceptDownloads: true });
     await context.route('**/*', route => new URL(route.request().url()).origin === origin
       ? route.continue() : route.abort());
     await context.addInitScript(() => {
@@ -147,14 +147,15 @@ try {
     sample.htmlBytes = Buffer.byteLength(html);
     const importer = page.getByRole('region', { name: 'Chrome 书签导入', exact: true });
     await timed(sample, 'htmlPreview', page, async () => {
-      await importer.getByLabel('Chrome 书签 HTML 文件').setInputFiles({
+      await importer.getByLabel('浏览器书签 HTML 文件').setInputFiles({
         name: `synthetic-${count}.html`, mimeType: 'text/html', buffer: Buffer.from(html),
       });
       await importer.getByText(`${count} 个网址`, { exact: true }).waitFor();
     });
     assert.equal(await libraryRaw(page), null, 'HTML preview remains read-only');
     await timed(sample, 'htmlCommitAndLibrary', page, async () => {
-      await importer.getByRole('button', { name: '确认导入', exact: true }).click();
+      await importer.getByRole('button', { name: '确认导入收藏', exact: true }).click();
+      await page.getByRole('button', { name: '查看收藏', exact: true }).click();
       await page.getByRole('heading', { name: '全部收藏', exact: true }).waitFor();
       await page.locator('[data-library-bookmark]').first().waitFor();
     });
@@ -243,11 +244,12 @@ try {
     sample.checks.launchpadContainsAllBookmarks = true;
     sample.longTasks.desktopAndLaunchpad = await page.evaluate(() => window.capacityLongTasks);
     await transfer(page);
-    const json = page.getByRole('region', { name: 'JSON 资产备份', exact: true });
+    await page.getByRole('group', { name: '导出格式', exact: true }).getByRole('radio', { name: '记个球收藏 · JSON', exact: true }).check();
+    const json = page.getByRole('region', { name: '导出收藏', exact: true });
     let backup;
     await timed(sample, 'jsonExport', page, async () => {
       const pending = page.waitForEvent('download');
-      await json.getByRole('button', { name: '导出全部资产', exact: true }).click();
+      await json.getByRole('button', { name: '导出收藏', exact: true }).click();
       backup = await readFile(await (await pending).path(), 'utf8');
     });
     const exported = JSON.parse(backup);
@@ -260,7 +262,8 @@ try {
     await restored.getByRole('banner').getByRole('button', { name: '切换为英文', exact: true }).click();
     await restored.getByRole('banner').getByRole('button', { name: 'Switch to Chinese', exact: true }).click();
     await transfer(restored);
-    const targetTransfer = restored.getByRole('region', { name: 'JSON 资产备份', exact: true });
+    await restored.getByRole('group', { name: '导入格式', exact: true }).getByRole('radio', { name: '记个球收藏 · JSON', exact: true }).check();
+    const targetTransfer = restored.getByRole('region', { name: '收藏资产 JSON', exact: true });
     const settingsBefore = await restored.evaluate(() => localStorage.getItem('jipage_settings_v1'));
     await timed(sample, 'jsonPreview', restored, async () => {
       await targetTransfer.getByLabel('JSON 资产文件', { exact: true }).setInputFiles({
@@ -270,7 +273,8 @@ try {
     });
     assert.equal(await libraryRaw(restored), null, 'JSON preview remains read-only');
     await timed(sample, 'jsonCommitAndLibrary', restored, async () => {
-      await targetTransfer.getByRole('button', { name: '确认导入', exact: true }).click();
+      await targetTransfer.getByRole('button', { name: '确认导入收藏', exact: true }).click();
+      await restored.getByRole('button', { name: '查看收藏', exact: true }).click();
       await restored.getByRole('heading', { name: '全部收藏', exact: true }).waitFor();
     });
     assert.deepEqual(canonical(await readLibrary(restored)), canonical(imported));

@@ -35,7 +35,12 @@ import { searchEnginePresetStatus } from './search-engine-presets';
 import { createTranslator } from '../i18n';
 import { selectLocale } from '../i18n/locale';
 import { USER_SETTINGS_KEY } from './user-locale';
-import { applicationStorage, mutateStorage } from './application-storage';
+import { applicationStorage, hasApplicationStorageDriver, mutateStorage } from './application-storage';
+import { commitRestoreRecords, RESTORE_JOURNAL, type RestoreRecord } from './restore-journal';
+import {
+  exportWorkbench, parseWorkbench, previewWorkbench, validateWorkbenchSearch, workbenchAssetText,
+  WORKBENCH_FORMAT, type WorkbenchOptions, type WorkbenchPreview, type WorkbenchState, type WorkbenchInventory,
+} from './import-export/workbench';
 
 const STORAGE_KEYS = {
   LIBRARY: 'jipage_library_v2',
@@ -126,6 +131,9 @@ export class StorageManager {
   private folderTrashBase: string | undefined;
   private dockBase: string | undefined;
   private readonly jsonPreviews = new WeakMap<JsonAssetPreview, { source: string; candidate: string }>();
+  private readonly workbenchPreviews = new WeakMap<WorkbenchPreview, {
+    source: string; candidate: string; records: RestoreRecord[];
+  }>();
   private readonly librarySnapshots = new WeakMap<DesktopLibrary, string>();
 
   private sourceRaw(): string {
@@ -273,6 +281,7 @@ export class StorageManager {
 
   private commitLibrary(expected: DesktopLibrary, next: DesktopLibrary, desktopLayout?: Layout, collections?: Collection[],
     extras?: { bookmarkTrash?: BookmarkTrashEntry[]; folderTrash?: FolderTrashEntry[]; dockBookmarkIds?: string[] }): void {
+    this.assertRestoreReady();
     if (extras?.bookmarkTrash !== undefined) readBookmarkTrash(extras.bookmarkTrash);
     if (extras?.folderTrash !== undefined) readFolderTrash(extras.folderTrash);
     const current = this.readLibrary();
@@ -331,6 +340,7 @@ export class StorageManager {
   }
 
   private safeSet<T>(key: string, value: T): void {
+    this.assertRestoreReady();
     try {
       applicationStorage().setItem(key, JSON.stringify(value));
     } catch (e) {
@@ -339,6 +349,7 @@ export class StorageManager {
   }
 
   private writeRequired<T>(key: string, value: T): void {
+    this.assertRestoreReady();
     const serialized = JSON.stringify(value);
     applicationStorage().setItem(key, serialized);
     try {
@@ -1108,7 +1119,129 @@ export class StorageManager {
     return exportPrototypeAssets({ ...this.readLibrary(), collections: this.getCollections() }, Date.now());
   }
 
+  private workbenchSource(): string {
+    return JSON.stringify([this.sourceRaw(), applicationStorage().getItem(STORAGE_KEYS.SEARCH_ENGINES),
+      applicationStorage().getItem(STORAGE_KEYS.SETTINGS)]);
+  }
+
+  private assertRestoreReady(): void {
+    if (applicationStorage().getItem(RESTORE_JOURNAL) !== null) throw new Error('RESTORE_RECOVERY_REQUIRED');
+  }
+
+  private readWorkbench(): WorkbenchState {
+    const library = this.readLibrary();
+    const data = this.envelope(applicationStorage().getItem(STORAGE_KEYS.LIBRARY));
+    const settingsRaw = applicationStorage().getItem(STORAGE_KEYS.SETTINGS);
+    let settings: Record<string, unknown> = {};
+    try {
+      if (settingsRaw !== null) {
+        const parsed = JSON.parse(settingsRaw);
+        if (!parsed || typeof parsed !== 'object' || Array.isArray(parsed)) throw new Error();
+        settings = parsed;
+      }
+    } catch { throw new Error('CORRUPT_DATA'); }
+    let engines: SearchEngine[];
+    try {
+      const raw = applicationStorage().getItem(STORAGE_KEYS.SEARCH_ENGINES);
+      engines = raw === null ? structuredClone(DEFAULT_SEARCH_ENGINES) : JSON.parse(raw);
+    } catch { throw new Error('CORRUPT_DATA'); }
+    let search: WorkbenchState['search'];
+    try {
+      search = validateWorkbenchSearch({
+        engines, defaultEngineId: settings.defaultSearchEngineId ?? DEFAULT_USER_SETTINGS.defaultSearchEngineId,
+      });
+    } catch (cause) {
+      throw new Error(cause instanceof Error && cause.message.startsWith('SEARCH_') ? `BACKUP_${cause.message}` : 'BACKUP_SEARCH_INVALID');
+    }
+    const rawTaskbar = data?.dockBookmarkIds ?? settings.dockBookmarkIds ?? [];
+    if (!Array.isArray(rawTaskbar) || rawTaskbar.some(id => typeof id !== 'string')
+      || new Set(rawTaskbar).size !== rawTaskbar.length) throw new Error('BACKUP_TASKBAR_INVALID');
+    const activeIds = new Set(library.bookmarks.map(b => b.id));
+    const demoDefaults = new Set(DEFAULT_USER_SETTINGS.dockBookmarkIds);
+    // Saving unrelated preferences historically persisted invisible demo taskbar IDs.
+    const taskbar = rawTaskbar.filter(id => activeIds.has(id) || !demoDefaults.has(id));
+    if (taskbar.some(id => !activeIds.has(id))) throw new Error('BACKUP_TASKBAR_INVALID');
+    return {
+      assets: { ...library, collections: this.getCollections() }, layout: this.getDesktopLayout(),
+      taskbar: taskbar as string[], search,
+      trashIds: [
+        ...readBookmarkTrash(data?.bookmarkTrash).map(e => e.bookmark.id),
+        ...readFolderTrash(data?.folderTrash).flatMap(e => [...e.bookmarks.map(r => r.bookmark.id), ...e.folders.map(r => r.folder.id)]),
+      ],
+    };
+  }
+
+  exportWorkbenchBackup(): string {
+    this.assertRestoreReady();
+    const source = this.workbenchSource();
+    const result = exportWorkbench(this.readWorkbench(), Date.now());
+    if (source !== this.workbenchSource()) throw new Error('CONFLICT');
+    return result;
+  }
+
+  getWorkbenchInventory(): WorkbenchInventory {
+    this.assertRestoreReady();
+    const source = this.workbenchSource();
+    const state = this.readWorkbench();
+    if (source !== this.workbenchSource()) throw new Error('CONFLICT');
+    return {
+      bookmarks: state.assets.bookmarks.length, folders: state.assets.folders.length,
+      collections: state.assets.collections.length, desktop: state.layout.shortcuts.length,
+      desktopFolders: state.layout.folders.length, taskbar: state.taskbar.length, search: state.search.engines.length,
+    };
+  }
+
+  previewWorkbenchRestore(text: string, options?: WorkbenchOptions): WorkbenchPreview {
+    this.assertRestoreReady();
+    const source = this.workbenchSource();
+    const backup = parseWorkbench(text);
+    const preview = previewWorkbench(backup, this.readWorkbench(), options ?? { desktop: true, taskbar: true, search: true });
+    const before = applicationStorage().getItem(STORAGE_KEYS.LIBRARY);
+    const data = this.envelope(before);
+    const next = preview.next;
+    const records: RestoreRecord[] = [{
+      key: STORAGE_KEYS.LIBRARY, before,
+      after: JSON.stringify({ ...data, version: 1, ...next.assets, desktopLayout: next.layout, dockBookmarkIds: next.taskbar }),
+    }];
+    if (preview.options.search) {
+      const settingsBefore = applicationStorage().getItem(STORAGE_KEYS.SETTINGS);
+      records.push({ key: STORAGE_KEYS.SEARCH_ENGINES, before: applicationStorage().getItem(STORAGE_KEYS.SEARCH_ENGINES),
+        after: JSON.stringify(next.search.engines) });
+      records.push({ key: STORAGE_KEYS.SETTINGS, before: settingsBefore,
+        after: JSON.stringify({ ...(settingsBefore === null ? {} : JSON.parse(settingsBefore)),
+          defaultSearchEngineId: next.search.defaultEngineId }) });
+    }
+    if (source !== this.workbenchSource()) throw new Error('CONFLICT');
+    this.workbenchPreviews.set(preview, { source, candidate: JSON.stringify(preview), records });
+    return preview;
+  }
+
+  async restoreWorkbench(preview: WorkbenchPreview, active: () => boolean = () => true): Promise<void> {
+    const ticket = this.workbenchPreviews.get(preview);
+    if (!ticket || ticket.candidate !== JSON.stringify(preview)) throw new Error('PREVIEW_STALE');
+    if (!navigator.locks?.request) throw new Error('LOCK_UNAVAILABLE');
+    await navigator.locks.request('jigeqiu:prototype:library-import', () =>
+      navigator.locks.request('jigeqiu:prototype:search-engines', async () => {
+        if (!active()) throw new Error('CANCELLED');
+        if (this.workbenchPreviews.get(preview) !== ticket) throw new Error('PREVIEW_STALE');
+        await this.mutate(() => {
+          if (!active()) throw new Error('CANCELLED');
+          if (ticket.source !== this.workbenchSource()) throw new Error('CONFLICT');
+          commitRestoreRecords(applicationStorage(), ticket.records, !hasApplicationStorageDriver());
+        });
+        this.workbenchPreviews.delete(preview);
+        this.pageBase = this.bookmarkBase = this.folderBase = this.desktopBase = undefined;
+        this.collectionBase = this.trashBase = this.folderTrashBase = this.dockBase = undefined;
+      }));
+  }
+
   previewJsonAssetImport(text: string, keepCopies = false): JsonAssetPreview {
+    try {
+      if (JSON.parse(text)?.format === WORKBENCH_FORMAT) text = workbenchAssetText(text);
+    } catch (cause) {
+      if (cause instanceof SyntaxError) throw new Error('IMPORT_INVALID');
+      throw cause;
+    }
     const source = this.sourceRaw();
     const preview = preparePrototypeJsonImport(text, {
       ...this.readLibrary(), collections: this.getCollections(),
@@ -1135,6 +1268,7 @@ export class StorageManager {
   }
 
   resetAllData(): void {
+    this.assertRestoreReady();
     if (this.hasLibraryChanges()) throw new Error('CONFLICT');
     Object.values(STORAGE_KEYS).forEach(key => applicationStorage().removeItem(key));
   }

@@ -20,7 +20,6 @@ import {
   FolderPlus,
   FolderTree,
   Search,
-  Download,
   Trash2,
   Edit2,
   Plus,
@@ -41,8 +40,7 @@ import {
   X,
 } from 'lucide-react';
 import { Modal } from '../common/Modal';
-import { PrototypeChromeImport } from './PrototypeChromeImport';
-import { JsonAssetTransfer } from './JsonAssetTransfer';
+import { AssetTransferPage } from './AssetTransferPage';
 import { SearchEnginePresetPicker } from './SearchEnginePresetPicker';
 import { SearchEngineOrderList } from './SearchEngineOrderList';
 import { SEARCH_ENGINE_PRESETS } from '../../data/search-engine-presets';
@@ -1458,52 +1456,12 @@ export const UserCenterView: React.FC<UserCenterViewProps> = ({
       {/* TAB 4: IMPORT & EXPORT                                  */}
       {/* ======================================================== */}
       {activeTab === 'import-export' && (
-        <div className="grid grid-cols-1 md:grid-cols-2 gap-6 max-w-4xl">
-          {/* Import */}
-          <PrototypeChromeImport onboarding={onboarding} language={userSettings.language} onImported={() => {
-            onLibraryChanged();
-            setActiveTab('bookmarks');
-            setSelectedFolderId('all');
-            setBookmarkSearch('');
-            setSelectedBmIds([]);
-            setBmPage(1);
-            onShowToast(t('managerChromeImportedToast'));
+        <AssetTransferPage onboarding={onboarding} language={userSettings.language}
+          onExportHtml={handleExportHtml} htmlExportError={!!htmlExportError}
+          onImported={onLibraryChanged} onViewBookmarks={() => {
+            setActiveTab('bookmarks'); setSelectedFolderId('all'); setBookmarkSearch('');
+            setSelectedBmIds([]); setBmPage(1);
           }} />
-
-          {/* Export */}
-          <div className="min-w-0 space-y-4">
-            <h3 className="text-base font-bold text-slate-900 dark:text-slate-100 flex items-center gap-2">
-              <Download size={18} className="text-emerald-500" />
-              <span>{t('managerExportTitle')}</span>
-            </h3>
-            <p className="text-xs text-slate-500 leading-relaxed">
-              {t('managerHtmlExportDescription')}
-            </p>
-
-            <div className="flex flex-col gap-2.5 pt-2">
-              {htmlExportError && <p role="alert" className="break-words text-xs text-rose-600 dark:text-rose-300">{t('managerHtmlExportFailed')}</p>}
-              <button
-                type="button"
-                onClick={handleExportHtml}
-                className="w-full flex items-center justify-between p-3.5 rounded-2xl bg-black/5 dark:bg-white/5 hover:bg-black/10 transition-colors text-xs font-semibold cursor-pointer"
-              >
-                <span>{t('managerHtmlExportButton')}</span>
-                <Download size={14} className="text-sky-500" />
-              </button>
-            </div>
-          </div>
-          <div className="md:col-span-2 border-t border-slate-200 dark:border-white/10 pt-6 min-w-0">
-            <JsonAssetTransfer language={userSettings.language} onImported={() => {
-              onLibraryChanged();
-              setActiveTab('bookmarks');
-              setSelectedFolderId('all');
-              setBookmarkSearch('');
-              setSelectedBmIds([]);
-              setBmPage(1);
-              onShowToast(t('managerJsonImportedToast'));
-            }} />
-          </div>
-        </div>
       )}
 
       {/* ======================================================== */}

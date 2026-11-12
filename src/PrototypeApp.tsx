@@ -103,6 +103,7 @@ export default function PrototypeApp() {
       bookmarks: storage.getBookmarks(), folders: storage.getFolders(), collections: storage.getCollections(),
       bookmarkTrash: storage.getBookmarkTrash(), folderTrash: storage.getFolderTrash(),
       settings: storage.getUserSettings(), desktopLayout: storage.getDesktopLayout(),
+      searchEngines: storage.getSearchEngines(),
     };
     setBookmarks(next.bookmarks);
     setFolders(next.folders);
@@ -111,6 +112,7 @@ export default function PrototypeApp() {
     setFolderTrash(next.folderTrash);
     setSettings(next.settings);
     setDesktopLayout(next.desktopLayout);
+    setSearchEngines(next.searchEngines);
   };
   const mutateLibrary = <T,>(commit: () => T): Promise<T> => commitAndRefresh(commit, refreshLibrary);
   const desktopAction = async (actions: Extract<AssetAction, { type: `desktop.${string}` }>[]) => {

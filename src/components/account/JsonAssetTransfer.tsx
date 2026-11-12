@@ -5,13 +5,17 @@ import type { JsonAssetPreview } from '../../services/import-export/prototype-js
 import { describeAssetError } from '../../services/import-export/ui-errors';
 import { ASSET_LIMITS } from '../../domain/assets/validation';
 import { createTranslator } from '../../i18n';
+import { WORKBENCH_FORMAT } from '../../services/import-export/workbench';
 
 interface Props {
   onImported(): void;
   language?: string;
+  onActivity?(dirty: boolean, busy: boolean): void;
+  onSwitchBackup?(): void;
+  importOnly?: boolean;
 }
 
-export function JsonAssetTransfer({ onImported, language = 'zh' }: Props) {
+export function JsonAssetTransfer({ onImported, language = 'zh', onActivity, onSwitchBackup, importOnly = false }: Props) {
   const t = createTranslator(language);
   const [preview, setPreview] = useState<JsonAssetPreview | null>(null);
   const [fileName, setFileName] = useState('');
@@ -21,11 +25,14 @@ export function JsonAssetTransfer({ onImported, language = 'zh' }: Props) {
   const [exported, setExported] = useState(false);
   const [ready, setReady] = useState(false);
   const [noticeLimit, setNoticeLimit] = useState(20);
+  const [isWorkbench, setIsWorkbench] = useState(false);
+  const [acceptMerge, setAcceptMerge] = useState(false);
   const request = useRef(0);
   const source = useRef('');
   const saving = useRef(false);
   const settledPreview = useRef<JsonAssetPreview | null>(null);
   useEffect(() => () => { request.current++; }, []);
+  useEffect(() => { onActivity?.(!!fileName, busy); }, [fileName, busy, onActivity]);
 
   const errorCode = (cause: unknown) => {
     return cause instanceof DOMException && cause.name === 'QuotaExceededError'
@@ -42,6 +49,8 @@ export function JsonAssetTransfer({ onImported, language = 'zh' }: Props) {
     setReady(false);
     setBusy(false);
     setError('');
+    setIsWorkbench(false);
+    setAcceptMerge(false);
   }
 
   function prepare(text: string, copies: boolean) {
@@ -55,18 +64,24 @@ export function JsonAssetTransfer({ onImported, language = 'zh' }: Props) {
     if (!file || saving.current) return;
     const ticket = ++request.current;
     source.current = '';
+    setPreview(null);
     setBusy(true);
     setReady(false);
     setError('');
     setExported(false);
     setFileName(file.name);
     setKeepCopies(false);
+    setIsWorkbench(false);
+    setAcceptMerge(false);
     try {
       if (file.size > ASSET_LIMITS.bytes) throw new Error('IMPORT_TOO_LARGE');
       const text = await file.text();
       if (ticket !== request.current) return;
       if (new TextEncoder().encode(text).byteLength > ASSET_LIMITS.bytes) throw new Error('IMPORT_TOO_LARGE');
       source.current = text;
+      let workbench = false;
+      try { workbench = JSON.parse(text)?.format === WORKBENCH_FORMAT; } catch { /* The import service reports malformed JSON. */ }
+      setIsWorkbench(workbench);
       prepare(text, false);
     } catch (cause) {
       if (ticket === request.current) setError(errorCode(cause));
@@ -89,10 +104,11 @@ export function JsonAssetTransfer({ onImported, language = 'zh' }: Props) {
   }
 
   async function confirm() {
-    if (!preview || !ready || busy || saving.current || settledPreview.current === preview) return;
+    if (!preview || !ready || busy || saving.current || settledPreview.current === preview || (isWorkbench && !acceptMerge)) return;
     const ticket = request.current;
     let committed = false;
     saving.current = true;
+    onActivity?.(true, true);
     setBusy(true);
     setError('');
     try {
@@ -113,6 +129,8 @@ export function JsonAssetTransfer({ onImported, language = 'zh' }: Props) {
       setReady(false);
       setFileName('');
       setKeepCopies(false);
+      setIsWorkbench(false);
+      setAcceptMerge(false);
       onImported();
     } catch (cause) {
       if (ticket === request.current) {
@@ -197,7 +215,7 @@ export function JsonAssetTransfer({ onImported, language = 'zh' }: Props) {
   const buttonClass = 'inline-flex items-center justify-center gap-1.5 px-3 py-2 rounded-lg text-xs border border-slate-300 dark:border-white/20 disabled:opacity-50 disabled:cursor-not-allowed';
 
   return <section aria-label={t('jsonTransferTitle')} className="min-w-0 space-y-4">
-    <div className="flex flex-wrap items-center justify-between gap-3">
+    {!importOnly && <><div className="flex flex-wrap items-center justify-between gap-3">
       <h3 className="text-base font-bold">{t('jsonTransferTitle')}</h3>
       <button type="button" data-onboarding="json-export" disabled={busy} onClick={exportAssets} className={buttonClass}>
         <Download size={14} /><span>{t('jsonTransferExport')}</span>
@@ -208,7 +226,7 @@ export function JsonAssetTransfer({ onImported, language = 'zh' }: Props) {
     </p>
     <p className="text-xs text-amber-800 dark:text-amber-200 leading-relaxed">
       {t('jsonTransferPrivacy')}
-    </p>
+    </p></>}
     <label className="relative flex items-center justify-center gap-3 p-5 rounded-lg border border-dashed border-teal-600/50 focus-within:ring-2 focus-within:ring-teal-600">
       <FileUp size={22} className="shrink-0 text-teal-700 dark:text-teal-300" />
       <span className="text-xs font-semibold min-w-0 break-all">{fileName || t('jsonTransferChoose')}</span>
@@ -220,12 +238,21 @@ export function JsonAssetTransfer({ onImported, language = 'zh' }: Props) {
           await choose(file);
         }} />
     </label>
-    <label className="flex items-start gap-2 text-xs leading-relaxed">
+    {isWorkbench && <div className="space-y-3 border-l-2 border-amber-500 pl-3 text-xs leading-relaxed">
+      <p role="status" className="font-medium text-amber-800 dark:text-amber-200">{t('workbenchMergeOnly')}</p>
+      <label className="flex items-start gap-2">
+        <input type="checkbox" checked={acceptMerge} disabled={busy} onChange={event => setAcceptMerge(event.target.checked)} />
+        <span>{t('workbenchMergeAccept')}</span>
+      </label>
+      {onSwitchBackup && <button type="button" disabled={busy} className={buttonClass} onClick={onSwitchBackup}>{t('workbenchGoRestore')}</button>}
+    </div>}
+    {preview && ready && !isWorkbench && <p role="status" className="text-xs font-medium text-teal-700 dark:text-teal-300">{t('bookmarkFileDetected')}</p>}
+    {(!importOnly || fileName) && <label className="flex items-start gap-2 text-xs leading-relaxed">
       <input type="checkbox" checked={keepCopies} disabled={busy}
         aria-label={t('jsonTransferCopiesLabel')}
         onChange={event => changeCopies(event.target.checked)} className="mt-0.5 accent-teal-700" />
       <span>{t('jsonTransferCopies')}</span>
-    </label>
+    </label>}
     {busy && <p role="status" className="text-xs">{t(saving.current ? 'transferSaving' : 'transferReading')}</p>}
     {preview && <div className="space-y-3">
       <dl aria-label={t('jsonTransferPreview')} className="flex flex-wrap gap-x-5 gap-y-2 text-xs" role="status">
@@ -263,7 +290,7 @@ export function JsonAssetTransfer({ onImported, language = 'zh' }: Props) {
       <button type="button" disabled={saving.current} onClick={cancel} className={buttonClass}>
         <X size={14} /><span>{t('transferCancel')}</span>
       </button>
-      <button type="button" disabled={busy || !ready || !preview || settledPreview.current === preview ||
+      <button type="button" disabled={busy || !ready || !preview || (isWorkbench && !acceptMerge) || settledPreview.current === preview ||
         preview.counts.bookmarks + preview.counts.folders + preview.counts.collections === 0}
         onClick={confirm} className={`${buttonClass} bg-teal-700 text-white`}>
         <Check size={14} /><span>{t('transferConfirm')}</span>

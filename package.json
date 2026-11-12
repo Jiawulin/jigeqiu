@@ -55,6 +55,8 @@
     "test:browser:management-scroll": "node tests/browser/management-scroll.mjs",
     "test:browser:hash-routing": "node tests/browser/hash-routing.mjs",
     "test:browser:json-assets": "node tests/browser/json-assets.mjs",
+    "test:browser:workbench-backup": "node tests/browser/workbench-backup.mjs",
+    "test:browser:transfer-formats": "node tests/browser/transfer-formats.mjs",
     "test:browser:static-first-use": "npm run build && node tests/browser/static-first-use.mjs",
     "test:browser:capacity": "npm run build && node tests/browser/capacity.mjs",
     "test:browser:data-correctness": "node tests/browser/data-correctness.mjs",

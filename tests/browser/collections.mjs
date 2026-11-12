@@ -172,12 +172,14 @@ try {
   await received.getByRole('banner').getByRole('button', { name: '管理中心', exact: true }).click();
   const receiverNav = received.getByRole('navigation', { name: '管理中心导航', exact: true });
   await receiverNav.getByRole('button', { name: '导入与导出', exact: true }).click();
-  const transfer = received.getByRole('region', { name: 'JSON 资产备份', exact: true });
+  await received.getByRole('group', { name: '导入格式', exact: true }).getByRole('radio', { name: '记个球收藏 · JSON', exact: true }).check();
+  const transfer = received.getByRole('region', { name: '收藏资产 JSON', exact: true });
   await transfer.getByLabel('JSON 资产文件', { exact: true }).setInputFiles({
     name: 'shared-collection.json', mimeType: 'application/json', buffer: Buffer.from(text),
   });
   await transfer.getByRole('status', { name: '导入预览', exact: true }).waitFor();
-  await transfer.getByRole('button', { name: '确认导入', exact: true }).click();
+  await transfer.getByRole('button', { name: '确认导入收藏', exact: true }).click();
+  await received.getByRole('button', { name: '查看收藏', exact: true }).click();
   await received.getByRole('heading', { name: '全部收藏', exact: true }).waitFor();
   await receiverNav.getByRole('button', { name: '我的网址单', exact: true }).click();
   await received.getByRole('button', { name: '打开 Updated Toolkit', exact: true }).click();

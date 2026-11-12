@@ -1,8 +1,9 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
 import { createExtensionStorage, STATE_KEY } from '../storage/local.ts';
-import { configureApplicationStorage } from '../../src/services/application-storage.ts';
+import { configureApplicationStorage, recoverApplicationRestore } from '../../src/services/application-storage.ts';
 import { StorageManager } from '../../src/services/storage.ts';
+import { exportWorkbench } from '../../src/services/import-export/workbench.ts';
 
 function fixture(initial = {}, reorder = false) {
   let disk = structuredClone(initial);
@@ -189,6 +190,63 @@ const bookmarkInput = {
   title: 'Test', url: 'https://example.org/', domain: 'example.org',
   category: 'cat-inbox', pinnedToDesktop: false, order: 0, collectionIds: [],
 };
+
+test('workbench restore uses the real extension transaction and discards all staged records on quota failure', async t => {
+  const original = Object.getOwnPropertyDescriptor(globalThis, 'navigator');
+  Object.defineProperty(globalThis, 'navigator', { configurable: true, value: {
+    locks: { request: async (_name, action) => action() },
+  } });
+  t.after(() => {
+    if (original) Object.defineProperty(globalThis, 'navigator', original);
+    else Reflect.deleteProperty(globalThis, 'navigator');
+  });
+  const f = fixture();
+  const driver = f.create();
+  await driver.initialize();
+  configureApplicationStorage(driver);
+  try {
+    const manager = new StorageManager();
+    const backup = exportWorkbench({
+      assets: { bookmarks: [{ ...bookmarkInput, id: 'restored', createdAt: 1, updatedAt: 1 }], folders: [], collections: [] },
+      layout: { shortcuts: [], folders: [{ id: 'empty-desktop', name: 'Empty', shortcutIds: [] }],
+        root: [{ kind: 'desktop-folder', id: 'empty-desktop' }], dock: [] },
+      taskbar: ['restored'],
+      search: { engines: [{ id: 'restored-engine', name: 'Synthetic', keyword: 'syn', icon: 'Search', isDefault: true,
+        isEnabled: true, urlTemplate: 'https://example.test/?q={query}' }], defaultEngineId: 'restored-engine' },
+    }, 10);
+    const preview = manager.previewWorkbenchRestore(backup);
+    const before = f.disk();
+    f.fail(new Error('QUOTA_EXCEEDED'));
+    await assert.rejects(manager.restoreWorkbench(preview), /QUOTA_EXCEEDED/);
+    assert.deepEqual(f.disk(), before);
+    assert.equal(driver.storage.getItem('jipage_library_v2'), null);
+    f.fail(undefined);
+    await manager.restoreWorkbench(preview);
+    const data = f.disk()[STATE_KEY].data;
+    assert.equal(JSON.parse(data.jipage_library_v2).bookmarks[0].id, 'restored');
+    assert.deepEqual(JSON.parse(data.jipage_library_v2).dockBookmarkIds, ['restored']);
+    assert.equal(JSON.parse(data.jipage_search_engines_v1)[0].id, 'restored-engine');
+    assert.equal(JSON.parse(data.jipage_settings_v1).language, 'en');
+    assert.equal(JSON.parse(data.jipage_settings_v1).defaultSearchEngineId, 'restored-engine');
+    assert.equal(data.jipage_workbench_restore_v1, undefined);
+  } finally { configureApplicationStorage(undefined); }
+});
+
+test('a migrated unfinished Web restore is recovered through the extension driver', async () => {
+  const f = fixture();
+  f.legacy.set('jipage_settings_v1', '{"language":"zh"}');
+  f.legacy.set('jipage_workbench_restore_v1', JSON.stringify({ version: 1, records: [
+    { key: 'jipage_settings_v1', before: '{"language":"en"}', after: '{"language":"zh"}' },
+  ] }));
+  const driver = f.create();
+  await driver.initialize();
+  configureApplicationStorage(driver);
+  try {
+    await recoverApplicationRestore();
+    assert.equal(driver.storage.getItem('jipage_settings_v1'), '{"language":"en"}');
+    assert.equal(f.disk()[STATE_KEY].data.jipage_workbench_restore_v1, undefined);
+  } finally { configureApplicationStorage(undefined); }
+});
 
 test('stale library edits reject rather than overwriting another page', async () => {
   const f = fixture();

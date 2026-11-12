@@ -34,8 +34,9 @@ function harness(kind: 'chrome' | 'json', refreshFailure = false, commitFailure?
   let refCursor = 0;
   let mounted = true;
   let lateStateWrites = 0;
-  let cleanup: (() => void) | undefined;
-  let effectRegistered = false;
+  const cleanups: (() => void)[] = [];
+  let effectCursor = 0;
+  const registeredEffects = new Set<number>();
   let writes = 0;
   let notifications = 0;
   const preview = {
@@ -55,7 +56,12 @@ function harness(kind: 'chrome' | 'json', refreshFailure = false, commitFailure?
     },
     useRef(current: unknown) { return refs[refCursor++] ?? (refs[refCursor - 1] = { current }); },
     useEffect(effect: () => (() => void) | undefined) {
-      if (!effectRegistered) { cleanup = effect(); effectRegistered = true; }
+      const index = effectCursor++;
+      if (!registeredEffects.has(index)) {
+        const cleanup = effect();
+        if (cleanup) cleanups.push(cleanup);
+        registeredEffects.add(index);
+      }
     },
   };
   const module = { exports: {} as Record<string, (props: object) => React.ReactElement> };
@@ -76,14 +82,14 @@ function harness(kind: 'chrome' | 'json', refreshFailure = false, commitFailure?
     notifications++;
     if (refreshFailure) throw new Error('refresh failed');
   } };
-  const render = () => { cursor = 0; refCursor = 0; return module.exports[name](props); };
+  const render = () => { cursor = 0; refCursor = 0; effectCursor = 0; return module.exports[name](props); };
   const find = (predicate: (node: React.ReactElement<any>) => boolean) => {
     const node = nodes(render()).find(predicate);
     assert.ok(node, 'Missing control');
     return node;
   };
   const confirm = () => find(node => node.type === 'button'
-    && ['Confirm Import', '确认导入'].includes(text(node)));
+    && ['Import bookmarks', '确认导入收藏'].includes(text(node)));
   return {
     props, render, confirm,
     async choose() {
@@ -91,7 +97,7 @@ function harness(kind: 'chrome' | 'json', refreshFailure = false, commitFailure?
         target: { files: [{ name: 'backup', size: 1, text: async () => 'backup' }], value: '' },
       });
     },
-    unmount() { mounted = false; cleanup?.(); },
+    unmount() { mounted = false; cleanups.forEach(cleanup => cleanup()); },
     stats: () => ({ writes, notifications, lateStateWrites }),
   };
 }

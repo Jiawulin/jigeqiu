@@ -9,9 +9,13 @@ import { createTranslator } from '../../i18n';
 import { TaskHint } from '../onboarding/TaskHint';
 import type { OnboardingTaskContext } from '../onboarding/types';
 
-interface Props { onImported(): void; language?: string; onboarding?: OnboardingTaskContext }
+interface Props {
+  onImported(): void; language?: string; onboarding?: OnboardingTaskContext;
+  onActivity?(dirty: boolean, busy: boolean): void;
+  embedded?: boolean;
+}
 
-export function PrototypeChromeImport({ onImported, language, onboarding }: Props) {
+export function PrototypeChromeImport({ onImported, language, onboarding, onActivity, embedded = false }: Props) {
   const t = createTranslator(language);
   const [preview, setPreview] = useState<ChromeLibraryPreview | null>(null);
   const [error, setError] = useState('');
@@ -20,6 +24,7 @@ export function PrototypeChromeImport({ onImported, language, onboarding }: Prop
   const request = useRef(0);
   const saving = useRef(false);
   const settledPreview = useRef<ChromeLibraryPreview | null>(null);
+  useEffect(() => { onActivity?.(!!fileName, busy); }, [fileName, busy, onActivity]);
   useEffect(() => () => { request.current++; }, []);
   const cancel = () => {
     if (saving.current) return;
@@ -59,6 +64,7 @@ export function PrototypeChromeImport({ onImported, language, onboarding }: Prop
     const ticket = request.current;
     let committed = false;
     saving.current = true;
+    onActivity?.(true, true);
     setBusy(true);
     setError('');
     try {
@@ -92,20 +98,20 @@ export function PrototypeChromeImport({ onImported, language, onboarding }: Prop
       if (ticket === request.current) setBusy(false);
     }
   }
-  return <section data-onboarding="html-import" aria-label={t('chromeImportLabel')} className="liquid-glass rounded-lg p-5 sm:p-6 space-y-4">
-    <h3 className="text-base font-bold flex items-center gap-2">
+  return <section data-onboarding="html-import" aria-label={t('chromeImportLabel')} className="min-w-0 space-y-4">
+    {!embedded && <><h3 className="text-base font-bold flex items-center gap-2">
       <Upload size={18} className="text-teal-600" />{t('chromeImportTitle')}
     </h3>
     <p className="text-xs text-slate-600 leading-relaxed">
       {t('chromeImportDescription')}
-    </p>
+    </p></>}
     {onboarding?.task === 'import' && <TaskHint language={language}
       message={preview ? 'onboardingImportPreview' : 'onboardingImportFile'} onDismiss={onboarding.onExit} />}
     <label className="relative flex flex-col items-center justify-center gap-3 p-6 rounded-lg border border-dashed border-teal-600/40 bg-white/40 dark:bg-white/5 focus-within:ring-2 focus-within:ring-teal-600">
       <FileUp size={26} className="text-teal-600" />
-      <span className="text-xs font-semibold max-w-full break-all">{fileName || t('chromeImportChoose')}</span>
+      <span className="text-xs font-semibold max-w-full break-all">{fileName || t(embedded ? 'transferChooseHtml' : 'chromeImportChoose')}</span>
       <input data-onboarding="import-file" className="absolute inset-0 w-full h-full opacity-0 cursor-pointer" type="file"
-        accept=".html,.htm,text/html" aria-label={t('chromeImportFile')} disabled={busy}
+        accept=".html,.htm,text/html" aria-label={t(embedded ? 'transferHtmlFile' : 'chromeImportFile')} disabled={busy}
         onChange={async event => { const file = event.target.files?.[0]; event.target.value = ''; await choose(file); }} />
     </label>
     {busy && <p role="status" className="text-xs">{t(saving.current ? 'transferSaving' : 'transferReading')}</p>}

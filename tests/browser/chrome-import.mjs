@@ -22,17 +22,19 @@ try {
   await server.listen();
   browser = await chromium.launch({ headless: true });
   const origin = `http://127.0.0.1:${server.httpServer.address().port}`;
-  const context = await browser.newContext();
+  const context = await browser.newContext({ locale: 'zh-CN' });
   const page = await context.newPage();
   const errors = [];
   page.on('pageerror', error => errors.push(error.message));
   await page.goto(origin);
+  await page.getByRole('button', { name: '暂时跳过', exact: true }).click();
   await page.getByTitle('启动台 · 所有应用与收藏 (桌面上滑亦可展开)', { exact: true }).click({ timeout: 5000 });
   await page.getByTitle('关闭启动台 (Esc 或点击空白处)').waitFor();
   await page.getByTitle('关闭启动台 (Esc 或点击空白处)').click();
   await page.getByTitle('添加收藏', { exact: true }).first().click();
   await page.getByRole('dialog', { name: '添加收藏', exact: true }).waitFor();
   await page.keyboard.press('Escape');
+  await page.evaluate(() => localStorage.clear());
   await page.goto(`${origin}/?workspace=import`);
   await page.getByRole('button', { name: '导入 Chrome 书签', exact: true }).first().waitFor({ timeout: 5000 });
   assert.equal(await page.evaluate(() => localStorage.length), 0, 'empty installation does not seed data');
@@ -79,7 +81,7 @@ try {
   assert.deepEqual(errors, []);
   console.log('PASS: empty → preview/cancel → import → folder/search/open → reload; desktop/mobile without overflow');
 
-  const legacy = await browser.newContext();
+  const legacy = await browser.newContext({ locale: 'zh-CN' });
   await legacy.addInitScript(() => {
     if (!localStorage.getItem('jipage_bookmarks_v1')) localStorage.setItem('jipage_bookmarks_v1', '[{"id":"keep-me"}]');
   });
@@ -91,7 +93,7 @@ try {
   assert.equal(await oldPage.getByRole('button', { name: '导入 Chrome 书签', exact: true }).first().isDisabled(), true);
   console.log('PASS: legacy data remains untouched with explicit recovery guidance');
 
-  const quota = await browser.newContext();
+  const quota = await browser.newContext({ locale: 'zh-CN' });
   await quota.addInitScript(() => {
     Storage.prototype.setItem = () => { throw new DOMException('Full', 'QuotaExceededError'); };
   });

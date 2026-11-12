@@ -1,5 +1,15 @@
 import { createTranslator } from '../../i18n';
 
+export function describeWorkbenchLocalError(code: string, language?: string): string {
+  const t = createTranslator(language);
+  if (code === 'BACKUP_SEARCH_DEFAULT_INVALID') return t('workbenchLocalDefaultInvalid');
+  if (code === 'BACKUP_SEARCH_COMMAND_CONFLICT') return t('workbenchLocalCommandConflict');
+  if (code.startsWith('BACKUP_SEARCH_')) return t('workbenchLocalSearchInvalid', { query: '{query}' });
+  if (code === 'BACKUP_TASKBAR_INVALID') return t('workbenchLocalTaskbarInvalid');
+  if (['IMPORT_INVALID', 'CORRUPT_DATA', 'UNSUPPORTED_VERSION', 'INVALID_REFERENCE', 'INVALID_INPUT', 'INVALID_URL'].includes(code)) return t('workbenchLocalInvalid');
+  return describeAssetError(code, language, 'json');
+}
+
 export function describeAssetError(code: string, language?: string, format: 'chrome' | 'json' = 'chrome'): string {
   const t = createTranslator(language);
   if (format === 'json') {

@@ -71,7 +71,7 @@ function harness(language = 'en', result: Pick<JsonAssetPreview, 'counts' | 'not
   };
 }
 test('SSR exposes localized asset-only import and export controls without decorative section cards', () => {
-  for (const [language, label] of [['en', 'Export All Assets'], ['zh', '导出全部资产']] as const) {
+  for (const [language, label] of [['en', 'Export bookmark assets only'], ['zh', '仅导出收藏资产']] as const) {
     const html = renderToStaticMarkup(React.createElement(JsonAssetTransfer, { language, onImported() {} }));
     assert.match(html, new RegExp(label));
     assert.match(html, /type="file"/);
@@ -116,7 +116,7 @@ test('commit holds shared lock, failure preserves preview, and unmount suppresse
     const h = harness();
     await h.choose({ name: 'assets.json', size: 20, text: async () => 'source' });
     h.fail();
-    await h.find('Confirm Import').props.onClick();
+    await h.find('Import bookmarks').props.onClick();
     assert.match(renderToStaticMarkup(h.render()), /different note/);
     assert.match(renderToStaticMarkup(h.render()), /role="alert"/);
     assert.ok(!h.calls.some(call => call[0] === 'imported'));
@@ -126,7 +126,7 @@ test('commit holds shared lock, failure preserves preview, and unmount suppresse
     (globalThis.navigator.locks.request as any) = async (_name: string, callback: () => void) => {
       await new Promise<void>(resolve => { release = resolve; }); await callback();
     };
-    const pending = fresh.find('Confirm Import').props.onClick();
+    const pending = fresh.find('Import bookmarks').props.onClick();
     fresh.unmount();
     release();
     await pending;
@@ -149,7 +149,7 @@ test('successful import commits exactly once inside the lock and only then refre
   } });
   try {
     await h.choose({ name: 'assets.json', size: 20, text: async () => 'source' });
-    await h.find('Confirm Import').props.onClick();
+    await h.find('Import bookmarks').props.onClick();
     assert.deepEqual(h.calls, [['preview', 'source', false], ['locked'], ['commit', preview], ['unlocked'], ['imported']]);
     assert.doesNotMatch(renderToStaticMarkup(h.render()), /different note/);
   } finally {
@@ -174,7 +174,7 @@ test('export downloads asset JSON and releases the generated object URL', () => 
   } });
   try {
     const h = harness();
-    h.find('Export All Assets').props.onClick();
+    h.find('Export bookmark assets only').props.onClick();
     assert.deepEqual(h.calls, [['export']]);
     assert.equal(anchor.href, 'blob:assets');
     assert.match(anchor.download, /^jigeqiu-assets-\d{4}-\d{2}-\d{2}\.json$/);
@@ -194,8 +194,8 @@ test('failed re-preview retains prior counts but disables confirmation until a v
   h.find('Keep duplicate copies').props.onChange({ target: { checked: true } });
   assert.match(renderToStaticMarkup(h.render()), /different note/);
   assert.match(renderToStaticMarkup(h.render()), /role="alert"/);
-  assert.equal(h.find('Confirm Import').props.disabled, true);
-  await h.find('Confirm Import').props.onClick();
+  assert.equal(h.find('Import bookmarks').props.disabled, true);
+  await h.find('Import bookmarks').props.onClick();
   assert.ok(!h.calls.some(call => call[0] === 'commit'));
 });
 
@@ -205,7 +205,7 @@ test('missing Web Locks never writes and retains the preview for recovery', asyn
   try {
     const h = harness();
     await h.choose({ name: 'assets.json', size: 20, text: async () => 'source' });
-    await h.find('Confirm Import').props.onClick();
+    await h.find('Import bookmarks').props.onClick();
     assert.match(renderToStaticMarkup(h.render()), /Safe saving is unavailable/);
     assert.match(renderToStaticMarkup(h.render()), /different note/);
     assert.ok(!h.calls.some(call => call[0] === 'commit' || call[0] === 'imported'));

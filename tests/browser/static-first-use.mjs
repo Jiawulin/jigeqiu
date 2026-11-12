@@ -47,7 +47,7 @@ try {
   browser = await chromium.launch({ headless: true });
   const errors = [], badResponses = [], backendRequests = [];
   async function device(width = 1440, locksAvailable = true) {
-    const context = await browser.newContext({ viewport: { width, height: 1000 }, acceptDownloads: true });
+    const context = await browser.newContext({ locale: 'zh-CN', viewport: { width, height: 1000 }, acceptDownloads: true });
     if (!locksAvailable) await context.addInitScript(() => Object.defineProperty(navigator, 'locks', { value: undefined }));
     await context.route('**/*', route => {
       const url = new URL(route.request().url());
@@ -131,13 +131,14 @@ try {
     name: 'chrome-bookmarks.html', mimeType: 'text/html',
     buffer: Buffer.from('<!DOCTYPE NETSCAPE-Bookmark-file-1><DL><DT><H3>Work</H3><DL><DT><A HREF="https://example.org/alpha">Alpha</A><DT><H3>Nested</H3><DL><DT><A HREF="https://example.org/beta">Beta</A></DL><DT><H3>Empty</H3><DL></DL></DL><DT><A HREF="javascript:alert(1)">Unsafe</A></DL>'),
   };
-  await importer.getByLabel('Chrome 书签 HTML 文件').setInputFiles(file);
+  await importer.getByLabel('浏览器书签 HTML 文件').setInputFiles(file);
   await importer.getByText('2 个网址', { exact: true }).waitFor();
   assert.equal(await library(page), null, 'Preview must not write');
   await importer.getByRole('button', { name: '取消', exact: true }).click();
   assert.equal(await library(page), null);
-  await importer.getByLabel('Chrome 书签 HTML 文件').setInputFiles(file);
-  await importer.getByRole('button', { name: '确认导入', exact: true }).click();
+  await importer.getByLabel('浏览器书签 HTML 文件').setInputFiles(file);
+  await importer.getByRole('button', { name: '确认导入收藏', exact: true }).click();
+  await page.getByRole('button', { name: '查看收藏', exact: true }).click();
   await page.getByRole('heading', { name: '全部收藏', exact: true }).waitFor();
   const imported = await library(page);
   assert.equal(imported.bookmarks.length, 2);
@@ -169,9 +170,10 @@ try {
   await page.keyboard.press('Escape');
   await manager(page);
   await section(page, 'import-export', '导入与导出');
-  const transfer = page.getByRole('region', { name: 'JSON 资产备份', exact: true });
+  await page.getByRole('group', { name: '导出格式', exact: true }).getByRole('radio', { name: '记个球收藏 · JSON', exact: true }).check();
+  const transfer = page.getByRole('region', { name: '导出收藏', exact: true });
   const downloaded = page.waitForEvent('download');
-  await transfer.getByRole('button', { name: '导出全部资产', exact: true }).click();
+  await transfer.getByRole('button', { name: '导出收藏', exact: true }).click();
   const download = await downloaded;
   const backup = await readFile(await download.path(), 'utf8');
   const data = JSON.parse(backup);
@@ -186,14 +188,16 @@ try {
   assert.equal(await library(fresh), null, 'Separate profile must have its own empty library');
   await manager(fresh);
   await section(fresh, 'import-export', '导入与导出');
-  const target = fresh.getByRole('region', { name: 'JSON 资产备份', exact: true });
+  await fresh.getByRole('group', { name: '导入格式', exact: true }).getByRole('radio', { name: '记个球收藏 · JSON', exact: true }).check();
+  const target = fresh.getByRole('region', { name: '收藏资产 JSON', exact: true });
   const settingsBefore = await fresh.evaluate(() => localStorage.getItem('jipage_settings_v1'));
   await target.getByLabel('JSON 资产文件', { exact: true }).setInputFiles({
     name: 'backup.json', mimeType: 'application/json', buffer: Buffer.from(backup),
   });
   await target.getByRole('status', { name: '导入预览', exact: true }).waitFor();
   assert.equal(await library(fresh), null);
-  await target.getByRole('button', { name: '确认导入', exact: true }).click();
+  await target.getByRole('button', { name: '确认导入收藏', exact: true }).click();
+  await fresh.getByRole('button', { name: '查看收藏', exact: true }).click();
   await fresh.getByRole('heading', { name: '全部收藏', exact: true }).waitFor();
   const restored = await library(fresh);
   assert.equal(restored.bookmarks.length, 2);

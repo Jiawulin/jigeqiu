@@ -22,7 +22,7 @@ Chrome / Edge new tab extension or deploy the Web version on your own site.
 | Desktop workspace | Independent shortcuts, desktop folders, pages, and taskbar pins |
 | Launchpad | Browse all bookmarks with pinyin search and keyboard navigation |
 | Global search | Find bookmarks, switch search engines, and run quick commands |
-| Import and backup | Browser bookmark HTML import, standard HTML export, and JSON asset backups |
+| Import and backup | Bookmark HTML/JSON exchange and asset backup with search engines, desktop folders, and taskbar pins |
 | Personalization | Light and dark themes, glass surfaces, built-in and custom local wallpapers |
 | Bilingual interface | Saved choice first; first use follows supported browser preferences (Chinese/English), otherwise Chinese; switch in the interface |
 | Browser extension | Load the extracted ZIP locally and open a new tab; no server required |
@@ -112,13 +112,13 @@ Local installation does not mean remote icons, external search, or websites work
 
 #### Extension Updates and Data
 
-1. Export a JSON asset backup from **Manage → Import & Export** and keep it outside the browser.
+1. Export an asset backup from **Manage → Import & export → Backup & restore** and keep it outside the browser.
 2. Close open JIGEQIU extension pages and replace the files in the **original installation
    folder** with the complete new package, keeping its folder and extension identity unchanged.
 3. Click **Reload** on the extensions page, open a new tab, and check your version and bookmarks.
 
 **Do not uninstall before updating:** uninstalling can remove local data.
-JSON backups cover bookmark assets, not all settings, desktop layouts, or wallpapers.
+Asset backups cover bookmarks, search engines, desktop folders and taskbar pins, but exclude wallpaper, appearance, history, trash and icon caches.
 Web, Chrome, and Edge data do not sync automatically. Export and import manually
 to move assets between them; back up before upgrading or changing browsers.
 See the [extension documentation](extension/README.md) for source builds, storage, and testing.
@@ -226,7 +226,7 @@ SHA256 and compare it with the matching line in the checksum file.
 ### Import Your Bookmarks
 
 1. Export your browser bookmarks as an HTML file from its bookmark manager.
-2. In JIGEQIU, open **Manage → Import & Export → Chrome Bookmark Import**.
+2. In JIGEQIU, open **Manage → Import & export → Bookmark transfer**, then select **Browser bookmarks · HTML** under **Import bookmarks**.
 3. Select the file, review the import preview, and confirm.
 4. Open **All Bookmarks** to browse and organize the imported folders and websites.
 
@@ -270,12 +270,24 @@ and instructions.
 
 Open **Manage → Import & Export**:
 
-- **HTML export** exchanges website addresses and folders with browsers.
-- **JSON asset backup** backs up and transfers JIGEQIU bookmark assets, with a preview before import.
+- **Bookmark transfer** imports/exports browser HTML and merges bookmark asset JSON without changing the workbench.
+- **Backup & restore** exports bookmarks, library folders, legacy collections, search engines and default engine, desktop shortcuts/folders (including empty folders), and ordered taskbar pins.
 
-JSON backups include active bookmarks, library folders, and legacy collection
-compatibility data. They exclude settings, search engines, desktop and taskbar
-layouts, the recycle bin, icon caches, and custom wallpapers.
+Import is above export, with independent HTML/JSON format choices; both use expanded square single-select controls. Hover, focus, or tap the question
+icons for format guidance: HTML exchanges browser bookmarks; JSON preserves JIGEQIU-specific bookmark
+fields. Use Backup & restore to include the workbench.
+
+Restore previews current and resulting counts. Bookmark assets must be replaced; search engines,
+desktop and taskbar are optional. Retained layouts keep valid entries and list invalid entries before removal.
+Existing trash is retained, and identity conflicts block restore. Full backups can also explicitly merge
+only bookmark assets in Bookmark transfer. Both formats exclude trash, history, language, wallpaper,
+appearance, icon caches and temporary windows. Icon configuration is retained, but remote images
+are not downloaded or guaranteed to work offline.
+JSON types are identified by content, not filenames. Bookmark JSON cannot restore a workbench;
+the page directs you to Bookmark transfer. A full backup selected for bookmark import offers
+Backup & restore or an explicit bookmark-only merge. Selecting a file never writes data.
+Backup statistics distinguish bookmark folders from desktop folders and hide legacy collection
+counts; compatible legacy data remains in backups.
 Keep regular backups outside your browser, especially before clearing site data
 or changing your deployment address.
 
